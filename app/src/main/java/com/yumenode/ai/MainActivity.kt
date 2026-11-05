@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -513,10 +513,14 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private lateinit var tabSettings: View
 
     // ---- API 设置区块：对话 / 绘图各一套，由 buildApiBlock() 生成，结构完全一致 ----
-    private val chatApiBlock: ApiBlockView? get() = modelsPage.chatApiBlock
-    private val drawApiBlock: ApiBlockView? get() = modelsPage.drawApiBlock
+    // ApiHost：ApiController 的逻辑在 ApiController.kt；这里只暴露视图 + 委托。
+    private val apiController by lazy { ApiController(this) }
+
+    override val modelsInitialized: Boolean get() = ::modelsPage.isInitialized
+    override val chatApiBlock: ApiBlockView? get() = modelsPage.chatApiBlock
+    override val drawApiBlock: ApiBlockView? get() = modelsPage.drawApiBlock
     /** 两边各有一行「xx模型：xxx」，插在 API 区块的地址下面 */
-    private val chatApiModelTv: TextView get() = modelsPage.chatApiModelTv
+    override val chatApiModelTv: TextView get() = modelsPage.chatApiModelTv
     // ---- 「对话模型」页内再分两个子页：模型 / API ----
     private val chatSubTabModel: TextView get() = modelsPage.chatSubTabModel
     private val chatSubTabApi: TextView get() = modelsPage.chatSubTabApi
@@ -528,7 +532,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private val drawModelPane: View get() = modelsPage.drawModelPane
     private val drawApiPane: View get() = modelsPage.drawApiPane
     /** 「绘图模型：xxx」那一行（绘图侧独有，插在 API 区块的地址下面） */
-    private val drawApiModelTv: TextView get() = modelsPage.drawApiModelTv
+    override val drawApiModelTv: TextView get() = modelsPage.drawApiModelTv
     private lateinit var tabDraw: View
     private lateinit var inputBar: View
 
@@ -1050,115 +1054,27 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         onRefreshSurfaces = { refreshApiSurfaces() },
     ).build(role, extraAfterAddress, extraNotes)
 
-    private fun apiPort(role: ApiServer.Role): Int =
-        chatPrefs().getInt(ApiService.keyPort(role), ApiService.defaultPort(role))
-            .coerceIn(1024, 65535)
-
-    /** 刷新某个 API 区块：状态 / 地址 / key / 开关 / 统计 */
+    // ---- API 逻辑：已提取到 ApiController.kt；这里只做兼容委托（ModelsHost/buildApiBlock 不变） ----
+    private fun apiPort(role: ApiServer.Role): Int = apiController.apiPort(role)
     private fun refreshApiBlock(role: ApiServer.Role, b: ApiBlockView?) {
-        if (b == null) return
-        val running = ApiService.isRunning(role)
-        b.statusTv.text =
-            if (running) getString(R.string.s_406, ApiService.addressOf(role) ?: "")
-            else getString(R.string.s_405)
-        b.statusTv.setTextColor(if (running) C_OK else C_SUBTEXT)
-        b.addrTv.visibility = if (running) View.VISIBLE else View.GONE
-        b.addrTv.text = if (running) getString(R.string.s_417) else ""
-        val key = chatPrefs().getString(ApiService.keyToken(role), null)
-        b.keyTv.text = getString(R.string.s_409,
-            if (key.isNullOrBlank()) getString(R.string.s_410) else key)
-        b.toggleBtn.text = getString(if (running) R.string.s_408 else R.string.s_407)
-        b.toggleBtn.background = rounded(
-            if (running) C_SOFT_BTN2 else C_PRIMARY, 12,
-            strokeDp = if (running) 1 else 0, strokeColor = C_BORDER)
-        b.toggleBtn.setTextColor(if (running) C_TEXT else Color.WHITE)
-        val (n, last) = ApiService.statsSnapshot(role)
-        b.statsTv.text = if (!running) "" else
-            getString(R.string.s_413, n) + (last?.let { "\n" + getString(R.string.s_414, it) } ?: "")
+        apiController.refreshApiBlock(role, b)
     }
 
-    private fun refreshApiUi() {
-        // 「对话模型：xxx」——告诉用户这个接口到底在服务哪个模型
-        if (::modelsPage.isInitialized) {
-            val name = ChatCore.modelName
-            chatApiModelTv.text =
-                if (name != null) getString(R.string.s_436, name) else getString(R.string.s_437)
-            chatApiModelTv.setTextColor(if (name != null) C_TEXT else C_SUBTEXT)
-        }
-        refreshApiBlock(ApiServer.Role.CHAT, chatApiBlock)
-    }
+    private fun refreshApiUi() { apiController.refreshApiUi() }
 
-    /** 绘图侧除了通用内容，还多一行「绘图模型：xxx」——那是句柄层面的状态，与服务无关 */
-    private fun refreshDrawApiUi() {
-        if (::modelsPage.isInitialized) {
-            val name = DrawCore.modelName
-            drawApiModelTv.text =
-                if (name != null) getString(R.string.s_426, name) else getString(R.string.s_427)
-            drawApiModelTv.setTextColor(if (name != null) C_TEXT else C_SUBTEXT)
-        }
-        refreshApiBlock(ApiServer.Role.DRAW, drawApiBlock)
-    }
+    private fun refreshDrawApiUi() { apiController.refreshDrawApiUi() }
 
-    /** 两个区块一起刷新：两者共用一个前台服务，一边变化常会牵动另一边 */
-    private fun refreshApiSurfaces() {
-        refreshApiUi()
-        refreshDrawApiUi()
-    }
+    private fun refreshApiSurfaces() { apiController.refreshApiSurfaces() }
 
-    /** 复制某个服务的地址（点一下地址那行即可） */
-    private fun copyApiAddress(role: ApiServer.Role) {
-        val addr = ApiService.addressOf(role) ?: return
-        runCatching {
-            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("ponko-api", addr))
-            toast(getString(R.string.s_416))
-        }
-    }
+    private fun copyApiAddress(role: ApiServer.Role) { apiController.copyApiAddress(role) }
 
-    /** 生成一个新的 API key（形如 sk-ponko-xxxx） */
-    private fun newApiKey(role: ApiServer.Role) {
-        val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        val key = "sk-ponko-" + (1..32).map { chars.random() }.joinToString("")
-        chatPrefs().edit().putString(ApiService.keyToken(role), key).apply()
-        afterApiConfigChanged(role)
-        toast(getString(R.string.s_418))
-    }
+    private fun newApiKey(role: ApiServer.Role) { apiController.newApiKey(role) }
 
-    private fun clearApiKey(role: ApiServer.Role) {
-        chatPrefs().edit().remove(ApiService.keyToken(role)).apply()
-        afterApiConfigChanged(role)
-        toast(getString(R.string.s_418))
-    }
+    private fun clearApiKey(role: ApiServer.Role) { apiController.clearApiKey(role) }
 
-    /** 端口 / key 改完之后：该服务在跑就重启它，让新配置立刻生效（不用用户自己记得重启） */
-    private fun afterApiConfigChanged(role: ApiServer.Role) {
-        refreshApiSurfaces()
-        if (ApiService.isRunning(role)) {
-            ApiService.sync(this)
-            android.os.Handler(mainLooper).postDelayed({ refreshApiSurfaces() }, 500)
-        }
-    }
+    private fun afterApiConfigChanged(role: ApiServer.Role) { apiController.afterApiConfigChanged(role) }
 
-    /**
-     * 开关某一类 API。
-     *
-     * **不检查有没有加载模型** —— 服务只是把 HTTP 端口架起来，加载模型是各接口自己的事：
-     * 没加载时对应接口返回 503 并说明原因。早期版本要求「先加载对话模型」，
-     * 那是把可选前置条件错当成了拦路条件，逼着想开绘图接口的人去加一个无关的模型。
-     */
-    private fun toggleApi(role: ApiServer.Role) {
-        val wasOn = ApiService.isRunning(role)
-        chatPrefs().edit().putBoolean(ApiService.keyEnabled(role), !wasOn).apply()
-        if (!wasOn && Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            // Android 13+ 常驻通知需要运行时权限；不给也能跑，只是看不到通知
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
-        }
-        ApiService.sync(this)
-        android.os.Handler(mainLooper).postDelayed({ refreshApiSurfaces() }, 700)
-    }
+    private fun toggleApi(role: ApiServer.Role) { apiController.toggleApi(role) }
 
     /** 切换模型页的「对话模型 / 绘图模型 / 打标模型」 */
     private fun switchModelsTab(index: Int) {
@@ -1678,7 +1594,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     // ================= 对话模型参数（模型页可调） =================
 
     /** 通用 SharedPreferences（chat/UI/API 设置共用） */
-    fun chatPrefs() = getSharedPreferences("ponko", MODE_PRIVATE)
+    override fun chatPrefs() = getSharedPreferences("ponko", MODE_PRIVATE)
 
     /** 模型页输入即存盘（存到当前模型名下）；空值/非法值回落到默认 */
     private fun saveChatParams() {
