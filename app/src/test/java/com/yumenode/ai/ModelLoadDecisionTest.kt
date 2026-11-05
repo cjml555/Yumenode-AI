@@ -40,7 +40,7 @@ class ModelLoadDecisionTest {
         assertEquals(GpuSupport.GPU_LAYERS_ALL, ModelLoadDecision.gpuLayers("GPU", gpuAllowed = true))
 
     @Test fun cpu_backend_means_zero_layers() =
-        assertEquals(0, ModelLoadDecision.gpuLayers("CPU"))
+        assertEquals(0, ModelLoadDecision.gpuLayers("CPU", gpuAllowed = true))
 
     // ── La via experimental: sin ella, pedir GPU no mete capas en la GPU ───
     // Un SIGSEGV del driver no se puede catchar: pedir capas en la GPU sin
@@ -48,11 +48,14 @@ class ModelLoadDecisionTest {
     @Test fun without_the_experimental_flag_gpu_means_zero_layers() =
         assertEquals(0, ModelLoadDecision.gpuLayers("GPU", gpuAllowed = false))
 
-    @Test fun the_experimental_flag_is_off_by_default() =
-        assertFalse(GpuSupport.GGUF_GPU_EXPERIMENTAL)
+    // La via experimental ahora lee el setting (KEY_GPU_EXPERIMENTAL, default
+    // OFF): ver GpuTrialFlagTest para gpuAllowed desde prefs. Aqui el
+    // parametro se pasa explicito, sin default.
+    @Test fun gpu_layers_with_setting_off_is_zero() =
+        assertEquals(0, ModelLoadDecision.gpuLayers("GPU", gpuAllowed = false))
 
-    @Test fun by_default_gpu_layers_is_zero() =
-        assertEquals(0, ModelLoadDecision.gpuLayers("GPU"))
+    @Test fun gpu_layers_with_setting_on_is_all() =
+        assertEquals(GpuSupport.GPU_LAYERS_ALL, ModelLoadDecision.gpuLayers("GPU", gpuAllowed = true))
 
     // ── actuallyOnGpu: pedir GPU no basta, el build debe traer Vulkan ──────
     @Test fun on_gpu_only_when_requested_and_vulkan_present() =
