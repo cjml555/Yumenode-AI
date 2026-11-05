@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -129,7 +129,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
     // ---- Manager dependencies ----
     private val crashHandler = CrashHandler(this)
     internal val sessionManager = SessionManager(this)
-    internal val attachmentHandler = AttachmentHandler.create(this, this)
+    override val attachmentHandler = AttachmentHandler.create(this, this)
 
     /** Barra de entrada del chat: dueña de sus vistas (MainActivity las delega). */
     private lateinit var chatInputBar: ChatInputBar
@@ -289,7 +289,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
         }
     }
 
-    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    override val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     internal var engine: Engine? = null
     internal var conversation: Conversation? = null
@@ -378,10 +378,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
 
     /** 文件读取结果：成功给 file，失败给 error（可直接显示的文案） */
     // private class FileRead(val file: PendingFile?, val error: String?)
-    /** 拍照时预创建的 MediaStore URI */
-    private var pendingCameraUri: Uri? = null
-    /** 安卓 9 及以下等拿到存储权限后再执行的动作（仅这些机型用得到） */
-    private var pendingStorageAction: (() -> Unit)? = null
 
     /** 当前处于绘图模式：对话页的输入会被当作正面提示词去生成图片 */
     /** 语言模型可用的绘图命令说明（仅当绘图模型与语言模型同时就绪时注入）。 */
@@ -516,6 +512,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
     // ApiHost：ApiController 的逻辑在 ApiController.kt；这里只暴露视图 + 委托。
     private val apiController by lazy { ApiController(this) }
 
+    // AttachHost: la lógica de adjuntos vive en AttachController.kt
+    private val attachController by lazy { AttachController(this) }
+    override val hasModel: Boolean get() = engine != null || llamaModel != null
+
     override val modelsInitialized: Boolean get() = ::modelsPage.isInitialized
     override val chatApiBlock: ApiBlockView? get() = modelsPage.chatApiBlock
     override val drawApiBlock: ApiBlockView? get() = modelsPage.drawApiBlock
@@ -534,7 +534,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
     /** 「绘图模型：xxx」那一行（绘图侧独有，插在 API 区块的地址下面） */
     override val drawApiModelTv: TextView get() = modelsPage.drawApiModelTv
     private lateinit var tabDraw: View
-    private lateinit var inputBar: View
+    override lateinit var inputBar: View
 
     /** 绘图页（文生图/图生图），懒加载 */
     internal var drawPage: DrawPage? = null
@@ -1398,105 +1398,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
 
 
     // ================= 聊天发图（.litertlm 多模态） =================
+    // Lógica de adjuntos extraída a AttachController.kt; delegación de compatibilidad.
+    private fun probeVision(path: String): Boolean = attachController.probeVision(path)
 
-    /** 探测 .litertlm 模型是否支持图像输入；任何异常都按「不支持」处理。 */
-    private fun probeVision(path: String): Boolean = try {
-        ModelInfo.from(path).use { it.inputModalities().vision }
-    } catch (_: Throwable) {
-        false
-    }
+    private fun onAttachClick() = attachController.onAttachClick()
 
-    private fun onAttachClick() {
-        // 生成过程中也允许先把附件备好（发送仍会被 busy 拦住）
-        // 注意：这里只管「模型加载了没」——文本文件任何模型都能读，不该被「必须多模态」挡住
-        if (engine == null && llamaModel == null) { toast(getString(R.string.s_273)); return }
-        showAttachDrawer()
-    }
-
-    /** 「＋」抽屉：贴着输入栏向上展开，可选拍照 / 图库。 */
-    private fun showAttachDrawer() {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = rounded(C_CARD, 14)
-            elevation = dp(8).toFloat()
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
-        // 外面再套一层留 8dp 余量：给阴影和缩放动画留空间，避免被弹窗边界裁掉
-        val outer = FrameLayout(this).apply {
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            addView(box, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
-            ))
-        }
-
-        fun mkItem(icon: String, label: String, onClick: () -> Unit): TextView =
-            TextView(this).apply {
-                text = "$icon  $label"
-                textSize = 14.5f
-                setTextColor(C_TEXT)
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-                isClickable = true
-                setOnClickListener { onClick() }
-            }
-
-        val popup = PopupWindow(outer, dp(150) + dp(16), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
-            isOutsideTouchable = true
-            // 透明背景：真正的外观画在 box 上，这样手动缩放动画才不会被窗口背景挡住
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        }
-
-        // 收起：先播完动画再 dismiss
-        fun close(action: () -> Unit) {
-            box.animate().alpha(0f).scaleY(0.75f)
-                .setDuration(120)
-                .setInterpolator(AccelerateInterpolator())
-                .withEndAction {
-                    popup.dismiss()
-                    action()
-                }
-                .start()
-        }
-
-        box.addView(mkItem("📷", getString(R.string.s_270)) { close { takePhoto() } }, matchWrap())
-        box.addView(mkItem("🖼", getString(R.string.s_271)) { close { attachmentHandler.pickChatImage() } }, matchWrap())
-        box.addView(mkItem("📄", getString(R.string.s_295)) { close { attachmentHandler.pickChatFile() } }, matchWrap())
-
-        // 先手动量一次，在 show 之前就把动画初值设好（否则会闪一帧全尺寸）
-        box.measure(
-            View.MeasureSpec.makeMeasureSpec(dp(150), View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        box.pivotY = box.measuredHeight.toFloat()
-        box.alpha = 0f
-        box.scaleY = 0.72f
-
-        // 向上展开：弹窗底边贴在输入栏上沿
-        val loc = IntArray(2)
-        inputBar.getLocationOnScreen(loc)
-        val screenH = resources.displayMetrics.heightPixels
-        popup.showAtLocation(
-            inputBar, Gravity.BOTTOM or Gravity.END, dp(10) - dp(8), screenH - loc[1] + dp(6)
-        )
-
-        // 入场动画：从底部往上长出来 + 淡入（不依赖 PopupWindow 的系统窗口动画）
-        box.animate().alpha(1f).scaleY(1f)
-            .setDuration(200)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-    }
-
-    /** 安卓 9 及以下写相册/拍照需要运行时 WRITE_EXTERNAL_STORAGE；安卓 10+ 走 MediaStore，免权限，直接执行。 */
-    private fun withLegacyStorage(action: () -> Unit) {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P ||
-            checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        ) {
-            action()
-            return
-        }
-        pendingStorageAction = action
-        requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), REQ_PERM_STORAGE)
-    }
+    private fun withLegacyStorage(action: () -> Unit) = attachController.withLegacyStorage(action)
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -1508,51 +1415,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
             galleryPage?.refresh()
             return
         }
-        if (requestCode != REQ_PERM_STORAGE) return
-        val act = pendingStorageAction
-        pendingStorageAction = null
-        if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) act?.invoke()
-        else toast(getString(R.string.s_294))
+        if (attachController.onStoragePermissionResult(requestCode, grantResults)) return
     }
 
-    private fun takePhoto() = withLegacyStorage { doTakePhoto() }
-
-    private fun doTakePhoto() {
-        val uri = try {
-            contentResolver.insert(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, "ponko_${System.currentTimeMillis()}.jpg")
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                }
-            )
-        } catch (_: Throwable) {
-            null
-        }
-        if (uri == null) { toast(getString(R.string.s_277)); return }
-        pendingCameraUri = uri
-        try {
-            startActivityForResult(
-                Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                    putExtra(MediaStore.EXTRA_OUTPUT, uri)
-                },
-                REQ_TAKE_PHOTO
-            )
-        } catch (_: Throwable) {
-            toast(getString(R.string.s_274))
-        }
-    }
-
-
-
-
-
-    /** Bitmap → JPEG 字节（作为 Content.ImageBytes 送给 LiteRT-LM）。 */
-    private fun bitmapToJpeg(bmp: Bitmap, quality: Int = 88): ByteArray {
-        val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        return out.toByteArray()
-    }
+    /** Bitmap → JPEG 字节（extraído a AttachController）。 */
+    private fun bitmapToJpeg(bmp: Bitmap, quality: Int = 88): ByteArray = attachController.bitmapToJpeg(bmp, quality)
 
     /** 用户发的图片也落盘（JPEG），随会话一起恢复。 */
     internal fun writeChatJpeg(bmp: Bitmap, name: String): Boolean = try {
@@ -1823,65 +1690,19 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost {
 
         // La camara se atiende siempre: hay que soltar pendingCameraUri aunque se cancele.
         if (requestCode == REQ_TAKE_PHOTO) {
-            handleTakePhotoResult(resultCode)
+            attachController.handleTakePhotoResult(resultCode)
             return
         }
         if (resultCode != RESULT_OK) return
         when (requestCode) {
             REQ_PICK_MODEL -> data?.data?.let { copyModelToPrivate(it) }
             REQ_PICK_MMPROJ -> data?.data?.let { visionManager?.copyMmprojToPrivate(it) }
-            AttachmentHandler.REQ_PICK_CHAT_IMAGE -> handlePickedChatImages(data)
-            AttachmentHandler.REQ_PICK_FILE -> handlePickedFiles(data)
+            AttachmentHandler.REQ_PICK_CHAT_IMAGE -> attachController.handlePickedChatImages(data)
+            AttachmentHandler.REQ_PICK_FILE -> attachController.handlePickedFiles(data)
             REQ_PICK_DRAW_MODEL -> handlePickedDrawModel(data)
             REQ_PICK_LORA -> handlePickedLora(data)
             REQ_TAGGER_ONNX -> handlePickedTaggerOnnx(data)
             REQ_TAGGER_CSV -> handlePickedTaggerCsv(data)
-        }
-    }
-
-    /** URIs de un resultado, venga como seleccion multiple o simple. */
-    private fun resultUris(data: Intent?): List<Uri> {
-        val clip = data?.clipData
-        if (clip != null) {
-            val out = ArrayList<Uri>(clip.itemCount)
-            for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { out.add(it) }
-            return out
-        }
-        return listOfNotNull(data?.data)
-    }
-
-    private fun handlePickedChatImages(data: Intent?) {
-        val uris = resultUris(data)
-        if (uris.isEmpty()) return
-        scope.launch {
-            val added = attachmentHandler.importPickedImages(uris) { bitmapToJpeg(it) }
-            if (added == 0 && attachmentHandler.getPendingImages().isEmpty()) {
-                toast(getString(R.string.s_275))
-            }
-        }
-    }
-
-    private fun handleTakePhotoResult(resultCode: Int) {
-        val uri = pendingCameraUri
-        pendingCameraUri = null
-        if (resultCode != RESULT_OK || uri == null) return
-        scope.launch {
-            val bmp = withContext(Dispatchers.IO) { attachmentHandler.decodeChatImage(uri) }
-            if (bmp == null) {
-                toast(getString(R.string.s_275))
-                return@launch
-            }
-            val jpeg = withContext(Dispatchers.IO) { bitmapToJpeg(bmp) }
-            attachmentHandler.addPendingImage(bmp, jpeg)
-        }
-    }
-
-    private fun handlePickedFiles(data: Intent?) {
-        val uris = resultUris(data)
-        if (uris.isEmpty()) return
-        scope.launch {
-            val err = attachmentHandler.importPickedFiles(uris)
-            if (err != null) toast(err)
         }
     }
 
