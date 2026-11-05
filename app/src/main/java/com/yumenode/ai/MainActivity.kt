@@ -602,12 +602,20 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     // ---- state ----
     private var currentTab = 0
+    private var gpuCrashNotice = false
     private var drawerOpen = false
     private val drawerWidthDp = 280
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // 最早挂上崩溃钩子：连主题解析 / 建界面阶段的异常也能落盘（崩在 buildUi 里否则没日志）
         crashHandler.install()
+        // Trial GPU colgado = el intento anterior con Vulkan mato el proceso:
+        // apagar el toggle solo y seguir en CPU.
+        if (GpuTrial.recoverOnStart(chatPrefs())) {
+            // toast tras setTheme/super.onCreate, mas abajo no hace falta:
+            // se guarda para mostrarlo al final de onCreate.
+            gpuCrashNotice = true
+        }
         // 主题必须在 setContentView 之前定好（系统栏/窗口底色来自 style，界面颜色来自 pal）
         themeManager.loadThemeMode(chatPrefs())
         themeManager.applyThemeInPlace()
@@ -653,6 +661,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             }
         } ?: ChatSession(System.currentTimeMillis(), getString(R.string.s_109))
         buildUi()
+        if (gpuCrashNotice) {
+            gpuCrashNotice = false
+            toast(getString(R.string.s_566))
+        }
     }
 
     /**
@@ -2526,6 +2538,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
                     val gpuAllowed = GpuSupport.gpuAllowed(chatPrefs())
                     val gpuLayers = ModelLoadDecision.gpuLayers(backendName, gpuAllowed)
+                    // Trial: si el driver mata el proceso al cargar, el flag
+                    // queda puesto y el siguiente arranque apaga el toggle.
+                    if (gpuLayers != 0) GpuTrial.begin(chatPrefs())
                     val params = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
@@ -2543,6 +2558,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn(), gpuAllowed)
                     withContext(Dispatchers.Main) {
                         llamaModel = m
+                        GpuTrial.clear(chatPrefs())
                         visionOk = vok
                         // 登记到进程级单例：对话 API 服务要复用同一个模型
                         ChatCore.attachGguf(m, path.substringAfterLast('/'), vok)
@@ -2631,6 +2647,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 }
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
+                    // Excepcion (no crash): el proceso vive, el trial no cuelga.
+                    GpuTrial.clear(chatPrefs())
                     setStatus(getString(R.string.s_058), C_ERR)
                     toast(getString(R.string.v_016, (e.message)))
                 }
