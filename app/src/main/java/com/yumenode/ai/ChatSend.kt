@@ -107,7 +107,7 @@ import com.yumenode.ai.tagRolesGguf
 
     internal suspend fun MainActivity.runRound(
         turn: QaTurn,
-        ai: MainActivity.AiArea,
+        ai: AiArea,
         gguf: Boolean,
         jpegs: List<ByteArray>,
         overText: String,

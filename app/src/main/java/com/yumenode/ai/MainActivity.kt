@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -514,7 +514,52 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // AttachHost: la lógica de adjuntos vive en AttachController.kt
     private val attachController by lazy { AttachController(this) }
+
+    // ChatSessionHost: la lógica de sesiones/render del chat vive en ChatSessionController.kt
+    private val chatSessionController by lazy { ChatSessionController(this) }
     override val hasModel: Boolean get() = engine != null || llamaModel != null
+
+    // ---- ChatSessionHost ----
+    override val sessionsManager get() = sessionManager
+    override val sessionItems: MutableList<ChatSession> get() = sessions
+    override var currentSession: ChatSession
+        get() = current
+        set(v) { current = v }
+    override var loadedEngine: com.google.ai.edge.litertlm.Engine?
+        get() = engine
+        set(v) { engine = v }
+    override var loadedConversation: com.google.ai.edge.litertlm.Conversation?
+        get() = conversation
+        set(v) { conversation = v }
+    override val loadedLlama: net.ladenthin.llama.LlamaModel? get() = llamaModel
+    override val inferenceBuilder: InferenceParamsBuilder get() = inferenceParamsBuilder
+    override val modelChatParams: ChatParams get() = chatParams
+    override val attachments: AttachmentHandler get() = attachmentHandler
+    override val markdownFull: io.noties.markwon.Markwon get() = markwonFull
+    override val chatViews: LinearLayout get() = chatContainer
+    override val scrollManager: ChatScrollManager? get() = chatScrollManager
+    override val thinkingBox: android.widget.CheckBox get() = thinkCheck
+    override val sendView: TextView get() = sendButton
+    override val loadView: TextView get() = loadButton
+    override val chatInput: EditText get() = inputEdit
+    override var isBusy: Boolean
+        get() = busy
+        set(v) { busy = v }
+    override var thinkingState: Boolean?
+        get() = convThinking
+        set(v) { convThinking = v }
+    override var drawCapableState: Boolean
+        get() = convDrawCapable
+        set(v) { convDrawCapable = v }
+    override val drawerIsOpen: Boolean get() = drawerOpen
+    override val drawCapable: Boolean get() = canDrawFromChat
+    override fun refreshSessionDrawer() = refreshDrawer()
+    override fun sendMessage() { doSend() }
+    override fun readChatImageAt(name: String): android.graphics.Bitmap? = readChatImage(name)
+    override fun bitmapToJpegFor(bmp: android.graphics.Bitmap, quality: Int): ByteArray = bitmapToJpeg(bmp, quality)
+    override fun showChatFullscreen(bmp: android.graphics.Bitmap) = showImageFullscreen(bmp)
+    override fun showChatImageMenuFor(bmp: android.graphics.Bitmap, name: String) = showImageMenu(bmp, name)
+    override fun attachChatBubble(area: AiArea, bmp: android.graphics.Bitmap, name: String) = attachImageBubble(area, bmp, name)
 
     override val modelsInitialized: Boolean get() = ::modelsPage.isInitialized
     override val chatApiBlock: ApiBlockView? get() = modelsPage.chatApiBlock
@@ -2449,74 +2494,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    internal fun setStoppingUi(stop: Boolean) {
-        if (stop) {
-            sendButton.text = "■"
-            sendButton.textSize = 16f
-            sendButton.background = rounded(C_ERR, 22)
-        } else {
-            sendButton.text = "↑"
-            sendButton.textSize = 19f
-            sendButton.background = rounded(C_PRIMARY, 22)
-        }
-        sendButton.isEnabled = true
-        sendButton.alpha = 1f
-    }
+    internal fun setStoppingUi(stop: Boolean) = chatSessionController.setStoppingUi(stop)
 
     // ---- 多对话管理 ----
 
     /** 新建一个对话（旧对话保留在列表中）。 */
-    private fun newSession() {
-        if (busy) { toast(getString(R.string.s_144)); return }
-        sessionManager.save()
-        val s = ChatSession(System.currentTimeMillis(), getString(R.string.s_109))
-        sessions += s
-        current = s
-        restoreSession()
-        sessionManager.save()
-        toast(getString(R.string.s_095))
-    }
+    private fun newSession() = chatSessionController.newSession()
 
-    private fun switchTo(s: ChatSession) {
-        if (s === current) return
-        if (busy) { toast(getString(R.string.s_144)); return }
-        sessionManager.save()
-        current = s
-        restoreSession()
-        sessionManager.save()
-    }
+    private fun switchTo(s: ChatSession) = chatSessionController.switchTo(s)
 
-    private fun confirmDeleteSession(s: ChatSession) {
-        if (sessions.size <= 1) {
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.s_139))
-                .setMessage(getString(R.string.s_187))
-                .setPositiveButton(getString(R.string.s_136)) { _, _ ->
-                    s.turns.clear()
-                    s.title = getString(R.string.s_109)
-                    restoreSession()
-                    sessionManager.save()
-                    if (drawerOpen) refreshDrawer()
-                    toast(getString(R.string.s_101))
-                }
-                .setNegativeButton(getString(R.string.s_066), null)
-                .show()
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.s_054))
-            .setMessage(s.title)
-            .setPositiveButton(getString(R.string.s_050)) { _, _ ->
-                val wasCurrent = s === current
-                sessions.remove(s)
-                if (wasCurrent) { current = sessions.last(); restoreSession() }
-                sessionManager.save()
-                if (drawerOpen) refreshDrawer()
-                toast(getString(R.string.s_086))
-            }
-            .setNegativeButton(getString(R.string.s_066), null)
-            .show()
-    }
+    private fun confirmDeleteSession(s: ChatSession) = chatSessionController.confirmDeleteSession(s)
 
     // ---- 会话切换/重建 ----
 
@@ -2535,87 +2522,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      * 会话跑起来后仅改 per-call 的 ThinkingConfig 不会生效（尤其是 关→开），
      * 所以必须按新模式重建会话；历史通过 initialMessages 保留。
      */
-    internal fun rebuildConversation(silent: Boolean = false, dropLast: Boolean = false) {
-        val eng = engine ?: return
-        val thinking = thinkCheck.isChecked
-        try { conversation?.close() } catch (_: Throwable) {}
-        conversation = try {
-            eng.createConversation(inferenceParamsBuilder.configFor(current, thinking, dropLast = dropLast))
-        } catch (e: Throwable) {
-            toast(getString(R.string.v_017, (e.message)))
-            eng.createConversation(
-                ConversationConfig(
-                    thinkingConfig = ThinkingConfig(enableThinking = thinking, thinkingTokenBudget = chatParams.thinkBudgetOrUnlimited())
-                )
-            )
-        }
-        convThinking = thinking
-        convDrawCapable = canDrawFromChat
-        if (!silent) {
-            addSystemHint(
-                if (thinking) getString(R.string.s_204)
-                else getString(R.string.s_085)
-            )
-        }
-    }
+    internal fun rebuildConversation(silent: Boolean = false, dropLast: Boolean = false) = chatSessionController.rebuildConversation(silent, dropLast)
 
     /** 重建 LiteRT 会话（若模型已加载）并把聊天区重绘为当前对话的内容。 */
-    private fun restoreSession(showHint: Boolean = true) {
-        try { conversation?.close() } catch (_: Throwable) {}
-        conversation = null
-        convThinking = null
-        val eng = engine
-        if (eng != null && llamaModel == null) {
-            val thinking = thinkCheck.isChecked
-            conversation = eng.createConversation(inferenceParamsBuilder.configFor(current, thinking))
-            convThinking = thinking
-            convDrawCapable = canDrawFromChat
-        }
-        chatContainer.removeAllViews()
-        chatScrollManager?.resetForRebuild()
-        if (current.turns.isEmpty()) {
-            if (showHint) {
-                addSystemHint(getString(R.string.s_032) +
-                    getString(R.string.s_033))
-            }
-        } else {
-            for (t in current.turns) renderTurn(t)
-        }
-        chatScrollManager?.scrollToBottom(force = true)
-    }
+    private fun restoreSession(showHint: Boolean = true) = chatSessionController.restoreSession(showHint)
 
     /**
      * 重新生成某一轮的回答。
      * 该轮之后的轮次依赖这轮的上下文，必须一并丢弃；然后把它重新送进去生成。
      */
-    internal fun regenerate(turn: QaTurn) {
-        if (busy) {
-            toast(getString(R.string.s_144))
-            return
-        }
-        val idx = current.turns.indexOf(turn)
-        if (idx < 0) return
-        val text = turn.user
-        // 忠实重发：这一轮带的图片与文件要一起还原，否则「重新生成」会退化成纯文字提问
-        val imgNames = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-        val imgPairs = imgNames.mapNotNull { n ->
-            readChatImage(n)?.let { bmp -> bmp to bitmapToJpeg(bmp) }
-        }
-        val fNames = turn.userFile?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-        val dropped = current.turns.size - idx - 1
-        while (current.turns.size > idx) current.turns.removeAt(current.turns.size - 1)
-        restoreSession(showHint = false)
-        if (dropped > 0) toast(getString(R.string.v_018, (dropped)))
-        attachmentHandler.clearPendingImages()
-        attachmentHandler.clearPendingFiles()
-        for (p in imgPairs) attachmentHandler.addPendingImage(p.first, p.second)
-        // 文件：把上一轮的原始内容还原到附件条（走和正常发送完全一样的路径）
-        val restored = attachmentHandler.restoreFiles(turn.fileStore)
-        if (restored > 0) toast(getString(R.string.s_320, (restored)))
-        else if (fNames.isNotEmpty()) toast(getString(R.string.s_321))
-        inputEdit.setText(text)
-        doSend()
-    }
+    internal fun regenerate(turn: QaTurn) = chatSessionController.regenerate(turn)
 
     /** 把一轮已有问答重绘到聊天区（历史回填）。 */
     /** 绘图模式下思考开关无意义（不经过对话模型），置灰禁用 */
@@ -2650,32 +2566,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         guessSupportsThinking(path.substringAfterLast('/'))
     }
 
-    private fun renderTurn(t: QaTurn) {
-        val names = t.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-        val files = t.userFile?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-        if (names.isEmpty()) {
-            addUserBubble(t.user, emptyList(), files)
-        } else {
-            addUserBubble(t.user, names.mapNotNull { readChatImage(it) }, files)
-        }
-        val ai = addAiArea { regenerate(t) }
-        val imgName = t.image
-        if (imgName != null) {
-            val bmp = readChatImage(imgName)
-            if (bmp != null) attachImageBubble(ai, bmp, imgName) else ai.answer.text = getString(R.string.s_003)
-        }
-        if (t.thought.isNotEmpty()) {
-            ai.thoughtBox.visibility = View.VISIBLE
-            ai.thoughtBody.text = t.thought
-            ai.thoughtHeader.text = getString(R.string.s_205)
-        }
-        if (t.answer.isNotEmpty()) {
-            markwonFull.setMarkdown(ai.answer, t.answer)
-        } else {
-            ai.answer.text = getString(R.string.s_005)
-            ai.answer.setTextColor(C_SUBTEXT)
-        }
-    }
+    private fun renderTurn(t: QaTurn) = chatSessionController.renderTurn(t)
 
     // ---- 持久化 ----
 
@@ -2888,7 +2779,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
 
 
-    internal fun extractText(m: Message): String = ChatCore.messageText(m)
+    internal fun extractText(m: Message): String = chatSessionController.extractText(m)
 
     /**
      * LiteRT 的流式片段语义在版本间不完全一致（可能是增量片段，也可能带累积内容）。
@@ -2898,180 +2789,20 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      *   - 已累积内容以新片段结尾   → 尾部重复片段，丢弃（忽略首尾空白）
      *   - 其余                     → 按增量追加
      */
-    internal fun mergeStreamDelta(cur: String, delta: String): String = ChatCore.mergeStream(cur, delta)
-
-    internal class AiArea(
-        val root: LinearLayout,
-        val thoughtBox: LinearLayout,
-        val thoughtHeader: TextView,
-        val thoughtBody: TextView,
-        val answer: TextView,
-        val regenButton: TextView,
-    )
+    internal fun mergeStreamDelta(cur: String, delta: String): String = chatSessionController.mergeStreamDelta(cur, delta)
 
     /** AI reply card: collapsible thinking section on top, Markdown answer below. */
-    internal fun addAiArea(onRegen: (() -> Unit)? = null): AiArea {
-        val wrap = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(C_CARD, 16)
-            elevation = dp(1).toFloat()
-        }
+    internal fun addAiArea(onRegen: (() -> Unit)? = null): AiArea = chatSessionController.addAiArea(onRegen)
 
-        val thoughtBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            background = rounded(C_THOUGHT_BG, 10)
-            visibility = View.GONE
-        }
-        val thoughtHeader = TextView(this).apply {
-            text = getString(R.string.s_205)
-            textSize = 12.5f
-            setTextColor(C_THOUGHT_TEXT)
-            typeface = Typeface.DEFAULT_BOLD
-            isClickable = true
-        }
-        val thoughtBody = TextView(this).apply {
-            textSize = 12.5f
-            setTextColor(C_THOUGHT_TEXT)
-            setLineSpacing(dp(2).toFloat(), 1f)
-            visibility = View.GONE
-        }
-        thoughtHeader.setOnClickListener {
-            val show = thoughtBody.visibility != View.VISIBLE
-            thoughtBody.visibility = if (show) View.VISIBLE else View.GONE
-            thoughtHeader.text = if (show) getString(R.string.s_206) else getString(R.string.s_205)
-            if (show) chatScrollManager?.scrollToBottom()
-        }
-        thoughtBox.addView(thoughtHeader, matchWrap())
-        thoughtBox.addView(thoughtBody, matchWrap().apply { topMargin = dp(6) })
-        wrap.addView(thoughtBox, matchWrap())
+    internal fun addUserBubble(text: String, images: List<Bitmap> = emptyList(), files: List<String> = emptyList()) = chatSessionController.addUserBubble(text, images, files)
 
-        val answer = TextView(this).apply {
-            textSize = 16f
-            setTextColor(C_TEXT)
-            setLineSpacing(dp(3).toFloat(), 1f)
-            setTextIsSelectable(true)
-            // 不给 isFocusable = false：那会把 setTextIsSelectable 设的焦点属性覆盖掉，
-            // 导致长按无法选中复制。防键盘焦点抢夺由 renderAnswer/renderThought 里的焦点守卫负责。
-        }
-        wrap.addView(answer, matchWrap().apply { topMargin = dp(4) })
-
-        // 「重新生成」：对回答不满意时，丢掉这一轮（及其后）的回答重问一次
-        val regenButton = TextView(this).apply {
-            text = getString(R.string.s_031)
-            textSize = 12.5f
-            setTextColor(C_PRIMARY)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(8), 0, 0)
-            isClickable = true
-            isFocusable = false
-            visibility = if (onRegen != null) View.VISIBLE else View.GONE
-            setOnClickListener { onRegen?.invoke() }
-        }
-        wrap.addView(regenButton, matchWrap())
-
-        chatContainer.addView(wrap, matchWrap().apply {
-            topMargin = dp(8)
-            bottomMargin = dp(2)
-        })
-        chatScrollManager?.scrollToBottom()
-        return AiArea(wrap, thoughtBox, thoughtHeader, thoughtBody, answer, regenButton)
-    }
-
-    internal fun addUserBubble(text: String, images: List<Bitmap> = emptyList(), files: List<String> = emptyList()) {
-        if (files.isNotEmpty()) {
-            val strip = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END
-            }
-            for (nm in files) {
-                strip.addView(TextView(this).apply {
-                    // 注意要写 this.text：本函数的 text 参数会把 TextView.text 遮住
-                    this.text = "📄 $nm"
-                    textSize = 12f
-                    setTextColor(C_TEXT)
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                    background = rounded(C_PRIMARY_SOFT, 12)
-                    setPadding(dp(10), dp(6), dp(10), dp(6))
-                }, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { leftMargin = dp(6) })
-            }
-            chatContainer.addView(strip, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(8) })
-        }
-        if (images.isNotEmpty()) {
-            val strip = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END
-            }
-            val w = if (images.size == 1) dp(160) else dp(112)
-            for (b in images) {
-                strip.addView(ImageView(this).apply {
-                    setImageBitmap(b)
-                    adjustViewBounds = true
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    isClickable = true
-                    setOnClickListener { showImageFullscreen(b) }
-                    setOnLongClickListener {
-                        showImageMenu(b, "ponko_${System.currentTimeMillis()}.png"); true
-                    }
-                }, LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    leftMargin = dp(6)
-                })
-            }
-            chatContainer.addView(strip, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(8) })
-        }
-        if (text.isEmpty()) {
-            chatScrollManager?.scrollToBottom()
-            return
-        }
-        val tv = TextView(this).apply {
-            this.text = text
-            textSize = 15.5f
-            setTextColor(Color.WHITE)
-            setTextIsSelectable(true)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            background = rounded(C_PRIMARY, 16)
-            elevation = dp(1).toFloat()
-        }
-        chatContainer.addView(tv, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.END
-            leftMargin = dp(56)
-            topMargin = dp(8)
-            bottomMargin = dp(2)
-        })
-        chatScrollManager?.scrollToBottom()
-    }
-
-    private fun addSystemHint(text: String) {
-        chatContainer.addView(TextView(this).apply {
-            this.text = text
-            textSize = 12.5f
-            setTextColor(C_SUBTEXT)
-            setLineSpacing(dp(2).toFloat(), 1f)
-            setPadding(dp(4), dp(8), dp(4), dp(8))
-        }, matchWrap())
-        chatScrollManager?.scrollToBottom()
-    }
+    private fun addSystemHint(text: String) = chatSessionController.addSystemHint(text)
 
     // ================= helpers =================
 
 
 
-    internal fun applyBusy(b: Boolean) {
-        busy = b
-        loadButton.isEnabled = !b
-        loadButton.alpha = if (b) 0.5f else 1f
-        // 生成过程中不禁用输入框：可以照常打字（此时发送键是「停止」，只是不发送）
-    }
+    internal fun applyBusy(b: Boolean) = chatSessionController.applyBusy(b)
 
     /** 导入/复制期间禁用「绘图模型」区的按钮，避免重复触发。 */
     private fun setDrawBusy(b: Boolean) {
