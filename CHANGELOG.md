@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **GPU experimental (Vulkan) opt-in** (`feat/gpu-experimental`): toggle en
+  Ajustes > Dispositivo, apagado por defecto, persistido en
+  `KEY_GPU_EXPERIMENTAL`. Solo se puede activar si `DeviceProbe` ve Vulkan
+  (sin bloqueo por SoC: en Adreno 619 queda activable con aviso fuerte).
+  El AAR de llama.cpp con Vulkan va en el APK por defecto; el toggle decide
+  si se usa.
+- **Auto-apagado tras crash** (`GpuTrial`): antes de cargar un GGUF o
+  generar con Vulkan0 se escribe `KEY_GPU_TRIAL`; tras la primera
+  carga/generación OK se borra. Al arrancar con el flag puesto, la GPU se
+  apaga sola, se muestra «GPU experimental desactivada tras un cierre
+  inesperado» y la app sigue en CPU.
+- Tests: `GpuTrialFlagTest` (8 casos) y `gpuAllowed` desde setting en
+  `ModelLoadDecisionTest`. Suite: 281 tests, 0 fallos.
+- **No probado en dispositivo en esta iteración** (QA diferida por el
+  owner): el crash del driver y la vuelta a CPU hay que verificarlos en
+  hardware real.
+
 ## [1.4.0] - 2026-10-21
 
 ### Added
