@@ -505,4 +505,10 @@
     <string name="s_550">TAESD 已下载。把它指定到模型集的 &quot;taesd&quot; 槽位，然后重新加载模型：它会替代完整 VAE，在 CPU 上解码快得多。</string>
     <string name="s_551">TAESD（tiny autoencoder）是蒸馏出来的迷你 VAE。它把 latent 解码成像素的速度远快于完整 VAE，而在手机上等待时间主要就卡在这一步。文件约 5 MB。注意：只适用于 SD1.x/SD2.x 模型；SDXL 需要 TAESDXL，应用目前还不下载它。</string>
     <string name="s_552">TAESD 已下载并指定到 &quot;taesd&quot; 槽位。重新加载模型即可使用：CPU 上的解码会快得多。</string>
+    <string name="s_561">实验 GPU (Vulkan)</string>
+    <string name="s_562">有风险：如果 GPU 驱动失败，应用可能意外关闭。下次启动时 GPU 会自动关闭，应用继续使用 CPU。</string>
+    <string name="s_563">此设备没有 Vulkan</string>
+    <string name="s_564">关</string>
+    <string name="s_565">开</string>
+    <string name="s_566">实验 GPU 已在一次意外关闭后自动关闭。</string>
 </resources>
