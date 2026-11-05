@@ -554,7 +554,7 @@
     <string name="s_511">Images</string>
     <string name="s_513">No models in this category yet</string>
 
-    <string name="s_560">GPU acceleration for GGUF is still experimental and is off for now: the driver can crash the app. The model runs on CPU.</string>
+    <string name="s_560">Experimental GPU is off: turn it on in Settings > Device if you want to try GPU. The model runs on CPU.</string>
     <string name="s_555">Drawing memory mode</string>
     <string name="s_556">High speed</string>
     <string name="s_557">Low memory</string>

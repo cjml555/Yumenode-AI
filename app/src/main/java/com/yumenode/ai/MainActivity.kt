@@ -2524,7 +2524,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     // 后端选 GPU 时把全部层交给 Vulkan（llama.cpp 用 -1 表示
                     // "全部"）；二进制没带 Vulkan 后端时 ggml 会静默留在 CPU。
                     val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
-                    val gpuLayers = ModelLoadDecision.gpuLayers(backendName)
+                    val gpuAllowed = GpuSupport.gpuAllowed(chatPrefs())
+                    val gpuLayers = ModelLoadDecision.gpuLayers(backendName, gpuAllowed)
                     val params = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
@@ -2539,7 +2540,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
                     // 运行时确认到底落在哪：getLlamaCppBuildInfo() 会带上编译
                     // 时的后端列表，"VULKAN" 在里面才说明真的会走 GPU。
-                    val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn())
+                    val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn(), gpuAllowed)
                     withContext(Dispatchers.Main) {
                         llamaModel = m
                         visionOk = vok
@@ -2557,8 +2558,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         )
                         if (gpuWanted && !onGpu) {
                         // El motivo importa: sin backend Vulkan en el binario
-                        // es otra cosa que la via experimental todavia
-                        // deshabilitada por el driver.
+                        // es otra cosa que el opt-in apagado.
                         toast(
                             getString(
                                 if (GpuSupport.isVulkanBuiltIn()) R.string.s_560 else R.string.s_016

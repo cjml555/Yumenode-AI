@@ -300,10 +300,26 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             host.palette,
             if (host.prefBool(KEY_GPU_EXPERIMENTAL, false)) 1 else 0,
         )
+        // Sin driver Vulkan el toggle no se puede activar (sin bloqueo por SoC).
+        val hasVulkan = caps.hasVulkan
+        if (!hasVulkan) {
+            gpuSwitch.isEnabled = false
+            gpuSwitch.alpha = 0.5f
+        }
         gpuSwitch.onChanged = { i ->
-            host.prefPutBool(KEY_GPU_EXPERIMENTAL, i == 1)
+            if (!hasVulkan) {
+                gpuSwitch.setIndexSilently(if (host.prefBool(KEY_GPU_EXPERIMENTAL, false)) 1 else 0)
+            } else {
+                host.prefPutBool(KEY_GPU_EXPERIMENTAL, i == 1)
+            }
         }
         settingsBody.addView(gpuSwitch, matchWrap().apply { topMargin = dp(8) })
+        if (!hasVulkan) {
+            settingsBody.addView(
+                host.ui.hintText(getString(R.string.s_563)),
+                matchWrap().apply { topMargin = dp(4) }
+            )
+        }
         settingsBody.addView(
             host.ui.hintText(getString(R.string.s_562)),
             matchWrap().apply { topMargin = dp(4) }
