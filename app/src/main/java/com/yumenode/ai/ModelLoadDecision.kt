@@ -30,7 +30,7 @@ internal object ModelLoadDecision {
      * SIGSEGV del driver no se puede catchar, asi que pedir capas en la GPU
      * sin estar verificado mataria la app.
      */
-    fun gpuLayers(backendName: String, gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL): Int =
+    fun gpuLayers(backendName: String, gpuAllowed: Boolean): Int =
         if (wantsGpu(backendName) && gpuAllowed) GpuSupport.GPU_LAYERS_ALL else 0
 
     /**
@@ -42,7 +42,7 @@ internal object ModelLoadDecision {
     fun actuallyOnGpu(
         backendName: String,
         vulkanBuiltIn: Boolean,
-        gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL,
+        gpuAllowed: Boolean,
     ): Boolean = wantsGpu(backendName) && vulkanBuiltIn && gpuAllowed
 
     /**
@@ -56,7 +56,7 @@ internal object ModelLoadDecision {
     fun shouldWarnGpuFallback(
         backendName: String,
         vulkanBuiltIn: Boolean,
-        gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL,
+        gpuAllowed: Boolean,
     ): Boolean = wantsGpu(backendName) && (!vulkanBuiltIn || !gpuAllowed)
 
     /**

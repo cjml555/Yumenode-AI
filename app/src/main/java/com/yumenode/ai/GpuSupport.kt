@@ -1,6 +1,7 @@
 // Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 package com.yumenode.ai
 
+import android.content.SharedPreferences
 import net.ladenthin.llama.LlamaModel
 
 /**
@@ -25,23 +26,13 @@ internal object GpuSupport {
 
     /**
      * ¿Se permite pedirle a llama.cpp que meta capas en la GPU?
-     *
-     * **De momento NO.** El backend Vulkan sobre Android todavia no es
-     * fiable en este dispositivo: al cargar un modelo con capas en la GPU
-     * el proceso muere con SIGSEGV (el driver de Adreno no resuelve bien
-     * las funciones de dispositivo de Vulkan y el dispatcher acaba
-     * llamando a un puntero nulo).
-     *
-     * Un SIGSEGV no se puede catchar: si el usuario elige "GPU" y el
-     * motor peta, la app se cierra. Eso es peor que ir en CPU. Por eso la
-     * opcion se pide pero no se activa hasta verificarlo en el dispositivo.
-     *
-     * El camino esta todomontado (AAR con Vulkan en local-maven/, script
-     * reproducible en tools/build-llama-vulkan.sh, y los parches del
-     * dispatcher y del buffer device address). Cuando se verifique en un
-     * movil, se cambia este flag a true y ya funciona.
+     * Lee el opt-in del usuario (KEY_GPU_EXPERIMENTAL, default OFF).
+     * Un SIGSEGV del driver no se puede catchar: por eso solo se activa
+     * cuando el usuario lo enciende, y el auto-apagado tras crash
+     * (GpuTrial) lo devuelve a CPU en el siguiente arranque.
      */
-    const val GGUF_GPU_EXPERIMENTAL = false
+    fun gpuAllowed(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_GPU_EXPERIMENTAL, false)
 
     /** Cacheado: la cadena de build no cambia durante la vida del proceso. */
     @Volatile

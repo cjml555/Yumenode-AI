@@ -30,6 +30,11 @@ internal const val MAX_TAG_ROUNDS = 2
 // ---- think-mode toggle (global pref, model-independent) ----
 internal const val KEY_CHAT_THINK = "chatThink"
 
+// ---- GPU experimental (Vulkan) opt-in + trial crash marker ----
+internal const val KEY_GPU_EXPERIMENTAL = "gpuExperimental"
+internal const val KEY_GPU_TRIAL = "gpuTrial"
+internal const val KEY_GPU_TRIAL_AT = "gpuTrialAt"
+
 // ---- Benchmark: endpoint por defecto (hardcoded) + override en Ajustes ----
 internal const val DEFAULT_BENCH_ENDPOINT = "https://yumenode-bench.cjml555.workers.dev/api/report"
 internal const val KEY_BENCH_ENDPOINT = "bench_endpoint"

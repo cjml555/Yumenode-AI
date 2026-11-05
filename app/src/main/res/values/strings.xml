@@ -554,7 +554,7 @@
     <string name="s_511">Images</string>
     <string name="s_513">No models in this category yet</string>
 
-    <string name="s_560">GPU acceleration for GGUF is still experimental and is off for now: the driver can crash the app. The model runs on CPU.</string>
+    <string name="s_560">Experimental GPU is off: turn it on in Settings > Device if you want to try GPU. The model runs on CPU.</string>
     <string name="s_555">Drawing memory mode</string>
     <string name="s_556">High speed</string>
     <string name="s_557">Low memory</string>
@@ -591,4 +591,10 @@
     <string name="s_550">TAESD downloaded. Assign it to the &quot;taesd&quot; slot of your model set, then reload the model: it replaces the full VAE and decodes much faster on CPU.</string>
     <string name="s_551">TAESD (tiny autoencoder) is a distilled mini VAE. It decodes the latent into pixels far faster than the full VAE, which is what dominates the wait on a phone. The file is about 5 MB. Note: it is only for SD1.x/SD2.x models; SDXL needs TAESDXL, which the app does not download yet.</string>
     <string name="s_552">TAESD downloaded and assigned to the &quot;taesd&quot; slot. Reload the model to use it: decoding gets much faster on CPU.</string>
+    <string name="s_561">Experimental GPU (Vulkan)</string>
+    <string name="s_562">Risky: if the GPU driver fails, the app may close unexpectedly. If that happens, GPU turns itself off on the next launch and the app continues on CPU.</string>
+    <string name="s_563">No Vulkan on this device</string>
+    <string name="s_564">Off</string>
+    <string name="s_565">On</string>
+    <string name="s_566">Experimental GPU was turned off after an unexpected close.</string>
 </resources>

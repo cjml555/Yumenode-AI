@@ -2,6 +2,8 @@
 package com.yumenode.ai.draw
 
 import com.yumenode.ai.DrawCore
+import com.yumenode.ai.GpuSupport
+import com.yumenode.ai.GpuTrial
 import com.yumenode.ai.DrawMemoryMode
 import com.yumenode.ai.InferConfig
 import com.yumenode.ai.YumenodeTheme
@@ -2083,7 +2085,11 @@ class DrawPage(
             sdHandle = 0L
             // 后端：选了 GPU 且设备有 Vulkan 就用它，否则 CPU。
             // 显式传后端名会关掉 sd.cpp 的 auto_fit，避免「选 CPU 却悄悄跑 GPU」。
-            val gpuDev = if (useGpu) SdCppEngine.vulkanDevice() else null
+            val gpuAllowed = GpuSupport.gpuAllowed(prefs())
+            val gpuDev = if (useGpu && gpuAllowed) SdCppEngine.vulkanDevice() else null
+            if (useGpu && !gpuAllowed) {
+                c.toast(c.getString(R.string.s_560), short = true)
+            }
             if (useGpu && gpuDev == null) {
                 stage("4a no vulkan device -> CPU")
                 c.toast(c.getString(R.string.s_332), short = true)
@@ -2617,6 +2623,9 @@ class DrawPage(
         // 对话页出图不走界面的 setGenerating，这里手动上报一句：
         // 否则 API 侧不知道界面在出图，会插进来抢同一个 native 句柄
         DrawCore.uiBusy = true
+        // Trial: el SIGSEGV al generar mata el proceso; el flag queda y el
+        // siguiente arranque apaga el toggle GPU.
+        if (activeBackend.startsWith("Vulkan")) GpuTrial.begin(prefs())
         try {
             // 推理是同步阻塞的 native 调用（一张几百秒），绝不能跟调用方同线程——
             // 调用方基本都在 Dispatchers.Main，否则整个 UI 会卡死到出图为止。
@@ -2644,6 +2653,7 @@ class DrawPage(
                 )
             } ?: throw IllegalStateException(c.getString(R.string.s_147))
             onProgress(steps, steps)
+            GpuTrial.clear(prefs())
             return ImageData(bmp, useSeed)
         } finally {
             DrawCore.uiBusy = false
@@ -2807,6 +2817,7 @@ class DrawPage(
         val scheduler = pickI2iScheduler(lora != null)
         val loraScale = DrawParamsLogic.loraScale(i2iLoraScaleEdit.text.toString())
 
+        if (activeBackend.startsWith("Vulkan")) GpuTrial.begin(prefs())
         val bmp = withContext(Dispatchers.IO) {
             val rgb = SdCppEngine.bitmapToRgb888(src)
             SdCppEngine.render(
@@ -2836,6 +2847,7 @@ class DrawPage(
             )
         } ?: throw IllegalStateException(c.getString(R.string.s_147))
         onProgress(steps, steps)
+        GpuTrial.clear(prefs())
         return ImageData(bmp, useSeed)
     }
 
