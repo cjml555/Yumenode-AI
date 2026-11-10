@@ -219,19 +219,14 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private var lastLocales: android.os.LocaleList? = null
 
     override fun currentAppLanguage(): String? =
-        if (Build.VERSION.SDK_INT >= 33) currentAppLocale33()
+        if (Build.VERSION.SDK_INT >= 33) currentAppLocale33(getSystemService(android.app.LocaleManager::class.java))
         else prefStr(KEY_APP_LANG, "").takeIf { it.isNotBlank() }
-
-    private fun currentAppLocale33(): String? {
-        val ls = getSystemService(android.app.LocaleManager::class.java).applicationLocales
-        return if (ls.isEmpty) null else ls[0].toLanguageTag().substringBefore('-')
-    }
 
     override fun setAppLanguage(tag: String?) {
         val t = tag?.trim().orEmpty()
         prefPutStr(KEY_APP_LANG, t)
         if (Build.VERSION.SDK_INT >= 33) {
-            applyAppLocale33(t)
+            applyAppLocale33(getSystemService(android.app.LocaleManager::class.java), t)
         } else {
             val cfg = Configuration(resources.configuration)
             cfg.setLocale(if (t.isEmpty()) java.util.Locale.getDefault() else java.util.Locale.forLanguageTag(t))
@@ -239,13 +234,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             resources.updateConfiguration(cfg, resources.displayMetrics)
             applyThemeInPlace()
         }
-    }
-
-    private fun applyAppLocale33(tag: String) {
-        val lm = getSystemService(android.app.LocaleManager::class.java)
-        lm.applicationLocales =
-            if (tag.isEmpty()) android.os.LocaleList.getEmptyLocaleList()
-            else android.os.LocaleList.forLanguageTags(tag)
     }
 
     override fun runBenchmark(onUpdate: (String) -> Unit) {
@@ -762,44 +750,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             buildUi()
         }
 
-        /** 状态栏 / 导航栏配色（跟随主题） */
-    private fun applySystemBarColors() {
-        val p = themeManager.pal
-        window.statusBarColor = p.statusBar
-        window.navigationBarColor = p.navBar
-
-        // Android 15+ (targetSdk 35+) ignora los colores de barra y dibuja el
-        // contenido debajo: el contraste depende del fondo real (p.bg), no de
-        // p.statusBar/p.navBar. Por eso se calcula por luminancia.
-        val edgeToEdge = Build.VERSION.SDK_INT >= 35
-        val lightStatus = barLuminance(if (edgeToEdge) p.bg else p.statusBar) > 0.55f
-        val lightNav = barLuminance(if (edgeToEdge) p.bg else p.navBar) > 0.55f
-
-        if (Build.VERSION.SDK_INT >= 30) {
-            val ic = window.insetsController ?: return
-            val mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            var appearance = 0
-            if (lightStatus) appearance = appearance or android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-            if (lightNav) appearance = appearance or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            ic.setSystemBarsAppearance(appearance, mask)
-        } else {
-            var flags = window.decorView.systemUiVisibility
-            flags = if (lightStatus) flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                    else flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-            flags = if (lightNav) flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-                    else flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
-            window.decorView.systemUiVisibility = flags
-        }
-    }
-
-    private fun barLuminance(c: Int): Float {
-        val r = (c shr 16) and 0xFF
-        val g = (c shr 8) and 0xFF
-        val b = c and 0xFF
-        return (0.299f * r + 0.587f * g + 0.114f * b) / 255f
-    }
-
         /** manifest 里声明了 uiMode，系统切深浅色不会自动重建，这里手动跟上。 */
         override fun onConfigurationChanged(newConfig: Configuration) {
             super.onConfigurationChanged(newConfig)
@@ -967,7 +917,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         buildDrawer(rootFrame)
         setContentView(rootFrame)
-        applySystemBarColors()
+        applySystemBarColors(window, themeManager.pal)
 
         refreshSavedModels()
         restoreSession()
