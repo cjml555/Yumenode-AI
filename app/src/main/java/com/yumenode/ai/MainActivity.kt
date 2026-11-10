@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -509,6 +509,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // DrawModelsHost: la lógica de slots de dibujo / LoRA / tagger / modelos guardados vive en DrawModelsController.kt
     private val drawModelsController by lazy { DrawModelsController(this) }
+
+    // ShellHost: la navegación / drawer / tabs viven aquí en ShellController.kt
+    private val shellController by lazy { ShellController(this) }
     override val drawPage: com.yumenode.ai.draw.DrawPage? get() = drawPageInternal
     override val taggerUi: TaggerUi get() = taggerUiInternal
     override val drawSlotsContainer: LinearLayout? get() = drawSlotsContainerInternal
@@ -824,7 +827,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ================= UI construction =================
 
-    private fun buildUi() {
+    override fun buildUi() {
         val rootFrame = FrameLayout(this).apply {
             setBackgroundColor(C_BG)
             fitsSystemWindows = true
@@ -931,7 +934,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     /** 对话页：消息列表 + 回到底部按钮 + 智能跟随滚动。 */
-    private fun buildChatPage(): View {
+    override fun buildChatPage(): View {
         val chatWrap = FrameLayout(this)
         scrollView = ScrollView(this).apply {
             isFillViewport = true
@@ -965,7 +968,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         return chatWrap
     }
 
-    private fun buildAppBar(): View {
+    override fun buildAppBar(): View {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(C_CARD)
@@ -1105,7 +1108,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private fun toggleApi(role: ApiServer.Role) { apiController.toggleApi(role) }
 
     /** 切换模型页的「对话模型 / 绘图模型 / 打标模型」 */
-    private fun switchModelsTab(index: Int) {
+    override fun switchModelsTab(index: Int) {
         if (::modelsPage.isInitialized) modelsPager.setCurrentItem(index, true)
         highlightModelsTabs(index)
         when (index) {
@@ -1116,7 +1119,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     /** 同步模型页页签高亮；手势翻页时也由它更新 */
-    private fun highlightModelsTabs(selected: Int) {
+    override fun highlightModelsTabs(selected: Int) {
         if (!::modelsPage.isInitialized) return
         ModelsHelpers.highlightTabs(
             tabs = listOf(modelsTabChat, modelsTabDraw, modelsTabTag),
@@ -1245,46 +1248,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ---- 底部导航 ----
 
-    private fun buildBottomNav(): View {
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(C_CARD)
-            elevation = dp(6).toFloat()
-        }
-        val items = listOf(
-            Triple("💬", getString(R.string.s_074), 0),
-            Triple("🧠", getString(R.string.s_124), 1),
-            Triple("🎨", getString(R.string.s_150), 2),
-            Triple("⬇️", getString(R.string.s_454), 3),
-            Triple("🖼️", getString(R.string.s_499), 4),
-            Triple("⚙️", getString(R.string.s_381), 5),
-        )
-        for ((icon, label, idx) in items) {
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                isClickable = true
-                setPadding(0, dp(7), 0, dp(7))
-                setOnClickListener { switchTab(idx) }
-            }
-            val iconTv = TextView(this).apply { text = icon; textSize = 17f; gravity = Gravity.CENTER }
-            val labelTv = TextView(this).apply {
-                text = label
-                textSize = 10f
-                maxLines = 2
-                gravity = Gravity.CENTER
-                setPadding(0, dp(1), 0, 0)
-            }
-            item.addView(iconTv, matchWrap())
-            item.addView(labelTv, matchWrap())
-            navIcons += iconTv
-            navLabels += labelTv
-            nav.addView(item, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        }
-        return nav
-    }
+    override fun buildBottomNav(): View = shellController.buildBottomNav()
 
-    private fun switchTab(index: Int) {
+    override fun switchTab(index: Int) {
         currentTab = index
         tabChat.visibility = if (index == 0) View.VISIBLE else View.GONE
         tabModels.visibility = if (index == 1) View.VISIBLE else View.GONE
@@ -1311,7 +1277,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ---- 左侧对话抽屉 ----
 
-    private fun buildDrawer(rootFrame: FrameLayout) {
+    override fun buildDrawer(rootFrame: FrameLayout) {
         drawerMask = View(this).apply {
             setBackgroundColor(C_SCRIM)
             visibility = View.GONE
@@ -1361,7 +1327,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         drawerPanel.translationX = -w.toFloat()
     }
 
-    private fun refreshDrawer() {
+    override fun refreshDrawer() {
         drawerBody.removeAllViews()
         drawerBody.addView(ui.actionButton(getString(R.string.s_201)) { closeDrawer(); newSession() },
             matchWrap().apply { setMargins(dp(12), dp(4), dp(12), dp(10)) })
@@ -1403,7 +1369,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    private fun openDrawer() {
+    override fun openDrawer() {
         if (drawerOpen) return
         refreshDrawer()
         drawerMask.visibility = View.VISIBLE
@@ -1415,7 +1381,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         drawerOpen = true
     }
 
-    private fun closeDrawer() {
+    override fun closeDrawer() {
         if (!drawerOpen) return
         drawerPanel.animate().translationX(-dp(drawerWidthDp).toFloat()).setDuration(180)
             .withEndAction { drawerPanel.visibility = View.GONE }.start()
