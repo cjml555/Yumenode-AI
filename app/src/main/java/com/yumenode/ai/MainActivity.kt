@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -280,12 +280,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     override val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    internal var engine: Engine? = null
-    internal var conversation: Conversation? = null
+    override var engine: Engine? = null
+    override var conversation: Conversation? = null
     private var modelPathInternal: String? = null
     /** El modelo cargado admite 'thinking' (heurístico por nombre). El checkbox
      *  de Thinking se oculta cuando el modelo no soporta razonamiento. */
-    private var modelSupportsThinking: Boolean = true
+    override var modelSupportsThinking: Boolean = true
     /** Pensamiento efectivo: el usuario lo activa Y el modelo lo admite. */
     internal val thinkingActive: Boolean get() = modelSupportsThinking && thinkCheck.isChecked
     private var taggerUiInternal = TaggerUi(
@@ -320,7 +320,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     // ---- 对话参数（模型页 · 对话模型）----
-    internal val chatParams = ChatParams(this) { modelPathInternal }
+    override val chatParams = ChatParams(this) { modelPathInternal }
     /** 回填参数到输入框时临时屏蔽 TextWatcher，免得多字段被互相覆盖 */
     private val chatParamsOwnerTv: TextView? get() = modelsPage.chatParamsOwnerTv
     private val chatCtxEdit: EditText? get() = modelsPage.chatCtxEdit
@@ -338,16 +338,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     /** 当前加载的 .litertlm 模型是否支持图像输入（读模型自带 Capabilities，失败按不支持处理）。 */
     /** true = el modelo cargado soporta entrada visual (delegado a VisionManager) */
-    var visionOk: Boolean
+    override var visionOk: Boolean
         get() = visionManager?.visionOk ?: false
         set(v) { visionManager?.setVisionOk(v) }
 
     /** Ruta al mmproj seleccionado (delegado a VisionManager) */
-    var mmprojPath: String?
+    override var mmprojPath: String?
         get() = visionManager?.mmprojPath
         set(v) { visionManager?.mmprojPath = v }
     /** 「借打标看图」时工具结果用哪个角色候选回传（0=首选，试错后记住可用的那个） */
-    internal var tagReturnIdx = 0
+    override var tagReturnIdx = 0
     /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图（propiedad de ChatInputBar) */
     private val attachButton: TextView get() = chatInputBar.attachButton
     private val attachPreviewStrip: HorizontalScrollView get() = chatInputBar.attachPreviewStrip
@@ -459,7 +459,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     internal lateinit var current: ChatSession
 
     /** 当前会话创建时的思考开关状态；与复选框不一致时需重建会话。 */
-    internal var convThinking: Boolean? = null
+    override var convThinking: Boolean? = null
 
     /** 中断后 LiteRT 会话可能已不可用：标记下一条消息发送前静默重建。 */
     internal var convNeedsRebuild = false
@@ -467,10 +467,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     /** 创建 LiteRT 会话时是否注入了 <draw> 绘图命令提示。
      *  加载/卸载绘图模型会改变这个能力，而 LiteRT 的 system 提示只在建会话时写入，
      *  所以能力变化后必须重建会话，否则模型根本不知道自己能画图。 */
-    internal var convDrawCapable = false
+    override var convDrawCapable = false
 
     /** GGUF（llama.cpp）后端实例；非空表示当前加载的是 .gguf 模型。 */
-    internal var llamaModel: LlamaModel? = null
+    override var llamaModel: LlamaModel? = null
     internal var ggufIterator: LlamaIterator? = null
 
     /** 用户点了「停止」。native 中断后往往抛异常（如 llama.cpp 的 task not found），
@@ -656,9 +656,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private var pendingDrawCrash = false
     /** 上次崩溃时已执行的阶段（来自 draw/.loadstage） */
     private var pendingDrawStage: String? = null
-    private val backendSpinner: Spinner get() = modelsPage.backendSpinner
-    private val loadButton: TextView get() = modelsPage.loadButton
-    internal val thinkCheck: CheckBox get() = chatInputBar.thinkCheck
+    override val backendSpinner: Spinner get() = modelsPage.backendSpinner
+    override val loadButton: TextView get() = modelsPage.loadButton
+    override val thinkCheck: CheckBox get() = chatInputBar.thinkCheck
     private val progressBarInternal: ProgressBar get() = modelsPage.progressBar
     private lateinit var chatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
@@ -1393,7 +1393,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ================= 聊天发图（.litertlm 多模态） =================
     // Lógica de adjuntos extraída a AttachController.kt; delegación de compatibilidad.
-    private fun probeVision(path: String): Boolean = attachController.probeVision(path)
+    override fun probeVision(path: String): Boolean = attachController.probeVision(path)
 
     private fun onAttachClick() = attachController.onAttachClick()
 
@@ -1801,7 +1801,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      * Activa el log nativo de llama.cpp (ggml). Sin esto, un fallo en el
      * backend sale como un crash sin contexto: el .so no dice nada.
      */
-    private fun enableLlamaLog() {
+    override fun enableLlamaLog() {
         try {
             net.ladenthin.llama.LlamaModel.setLogger(
                 net.ladenthin.llama.args.LogFormat.TEXT
@@ -2053,7 +2053,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     /** 把一轮已有问答重绘到聊天区（历史回填）。 */
     /** 绘图模式下思考开关无意义（不经过对话模型），置灰禁用 */
-    private fun updateThinkEnabled() {
+    override fun updateThinkEnabled() {
         // 可能由 IO 线程上的回调触发；setEnabled 会驱动 Ripple 动画，必须回主线程
         runOnUiThread {
             val visible = modelSupportsThinking
@@ -2068,14 +2068,14 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      *  No hay API fiable en litertlm para 'supportsThinking' (Capabilities solo
      *  expone inputModalities().vision), así que se basa en el nombre del archivo.
      *  Familias razonantes conocidas: DeepSeek-R1, Qwen3, Kimi/K1, etc. */
-    private fun guessSupportsThinking(name: String): Boolean {
-        val n = name.lowercase()
+    override fun guessSupportsThinking(filename: String): Boolean {
+        val n = filename.lowercase()
         return n.contains("r1") || n.contains("qwen3") || n.contains("thinking") ||
             n.contains("kimi") || n.contains("deepseek-reasoning")
     }
 
     /** Lee supportsThinking() real del modelo LiteRT (API 0.18+); si falla, usa la heurística. */
-    private fun probeThinking(path: String): Boolean = try {
+    override fun probeThinking(path: String): Boolean = try {
         ModelInfo.from(path).use {
             (it as? ModelInfo.Llm)?.supportsThinking()
                 ?: guessSupportsThinking(path.substringAfterLast('/'))
@@ -2241,7 +2241,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     internal fun addUserBubble(text: String, images: List<Bitmap> = emptyList(), files: List<String> = emptyList()) = chatSessionController.addUserBubble(text, images, files)
 
-    private fun addSystemHint(text: String) = chatSessionController.addSystemHint(text)
+    override fun addSystemHint(text: String) = chatSessionController.addSystemHint(text)
 
     // ================= helpers =================
 
@@ -2305,4 +2305,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
+
+    // ================= ModelLoadHost required overrides =================
+    override val appCacheDir: File get() = File(getExternalFilesDir(null), "ai")
+
+    override fun markModelLoaded(path: String) {
+        chatParams.markModelLoaded(path)
+    }
+
+    override fun markModelUnloaded() {
+        chatParams.markModelUnloaded()
+    }
 }
