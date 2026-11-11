@@ -147,9 +147,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             this@MainActivity.onAttachClick()
         }
         override fun onSendOrStop() {
-            this@MainActivity.onSendOrStop()
+            modelLoadController.toggleLoad()
         }
     }
+
+    internal fun setStoppingUi(stop: Boolean) = chatSessionController.setStoppingUi(stop)
 
     internal val commandScanner = CommandScanner()
 
@@ -332,6 +334,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val chatBudgetEdit: EditText? get() = modelsPage.chatBudgetEdit
     private val chatSeedEdit: EditText? get() = modelsPage.chatSeedEdit
     internal var busy = false
+    private val modelLoadController by lazy { ModelLoadController(this) }
 
     /** Chat 消息处理：构造文件块、编码文件、估算 token、准备发送 */
     internal val chatManager = ChatManager(this, attachmentHandler)
@@ -1814,205 +1817,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     private fun toggleLoad() {
-        if (engine != null || llamaModel != null) {
-            unloadModel()
-            return
-        }
-        val path = modelPathInternal ?: run { toast(getString(R.string.s_175)); return }
-        val isGguf = ModelLoadDecision.isGguf(path)
-        val backendName = backendSpinner.selectedItem.toString()
-        val thinking = thinkCheck.isChecked
-        applyBusy(true)
-        setStatus(getString(R.string.s_127), C_WARN)
-        progressBarInternal.visibility = View.VISIBLE
-        progressBarInternal.isIndeterminate = true
-        scope.launch(Dispatchers.IO) {
-            try {
-                if (isGguf) {
-                    enableLlamaLog()
-                    // llama.cpp：单 slot + cache_prompt。会话内 KV 前缀会被复用，长对话只需计算新增 token。
-                    // 线程数走全局设置（「关于 → 设置」），与绘图、打标共用同一个值。
-                    val cpus = InferConfig.threads(this@MainActivity)
-                    // 后端选 GPU 时把全部层交给 Vulkan（llama.cpp 用 -1 表示
-                    // "全部"）；二进制没带 Vulkan 后端时 ggml 会静默留在 CPU。
-                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
-                    val gpuAllowed = GpuSupport.gpuAllowed(chatPrefs())
-                    val gpuLayers = ModelLoadDecision.gpuLayers(backendName, gpuAllowed)
-                    // Trial: si el driver mata el proceso al cargar, el flag
-                    // queda puesto y el siguiente arranque apaga el toggle.
-                    if (gpuLayers != 0) GpuTrial.begin(chatPrefs())
-                    val params = ModelLoadSpecs.llamaParams(
-                        path = path,
-                        ctxSize = chatParams.ctx(),
-                        maxOut = chatParams.maxOut(),
-                        threads = cpus,
-                        mmprojPath = mmprojPath,
-                        gpuLayers = gpuLayers,
-                        cacheTypeK = KvCacheConfig.type(this@MainActivity),
-                        cacheTypeV = KvCacheConfig.type(this@MainActivity),
-                    )
-                    val m = LlamaModel(params)
-                    val vok = try { m.supportsVision() } catch (_: Throwable) { false }
-                    // 运行时确认到底落在哪：getLlamaCppBuildInfo() 会带上编译
-                    // 时的后端列表，"VULKAN" 在里面才说明真的会走 GPU。
-                    val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn(), gpuAllowed)
-                    withContext(Dispatchers.Main) {
-                        llamaModel = m
-                        GpuTrial.clear(chatPrefs())
-                        visionOk = vok
-                        // 登记到进程级单例：对话 API 服务要复用同一个模型
-                        ChatCore.attachGguf(m, path.substringAfterLast('/'), vok)
-                        modelSupportsThinking = guessSupportsThinking(path.substringAfterLast('/'))
-                        chatParams.markModelLoaded(path)
-                        tagReturnIdx = 0
-                        engine = null
-                        conversation = null
-                        convThinking = null
-                        setStatus(
-                            if (onGpu) getString(R.string.s_078_gpu) else getString(R.string.s_078),
-                            C_OK
-                        )
-                        if (gpuWanted && !onGpu) {
-                        // El motivo importa: sin backend Vulkan en el binario
-                        // es otra cosa que el opt-in apagado.
-                        toast(
-                            getString(
-                                if (GpuSupport.isVulkanBuiltIn()) R.string.s_560 else R.string.s_016
-                            )
-                        )
-                    }
-                    }
-                } else {
-                    // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU
-                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
-                    var usedBackendName = backendName
-                    // 先读模型自带的 Capabilities：是否为多模态（图文）模型
-                    val vok = probeVision(path)
-                    // 坑：EngineConfig.visionBackend 默认是 null，运行时就不会创建 vision executor，
-                    // 发图时直接报 "Vision executor should not be null, please TryLoadingVisionExecutor() first."；
-                    // 所以探测到多模态时必须显式传入 visionBackend（并同时放开 maxNumImages）。
-                    val cfg = ModelLoadSpecs.engineConfig(
-                        path = path,
-                        maxTokens = chatParams.ctx(),
-                        gpuWanted = gpuWanted,
-                        visionOk = vok,
-                        maxImages = AttachmentHandler.MAX_ATTACH,
-                        cacheDir = cacheDir.absolutePath,
-                    )
-                    val eng: Engine = try {
-                        val g = Engine(cfg)
-                        g.initialize()
-                        g
-                    } catch (e: Throwable) {
-                        if (!gpuWanted) throw e
-                        // GPU 后端在这台机器上用不了 → 退回 CPU，别让用户用不了模型
-                        withContext(Dispatchers.Main) { toast(getString(R.string.s_335)) }
-                        usedBackendName = "CPU"
-                        val cpu = Engine(
-                            ModelLoadSpecs.cpuEngineConfig(
-                                path = path,
-                                maxTokens = chatParams.ctx(),
-                                visionOk = vok,
-                                maxImages = AttachmentHandler.MAX_ATTACH,
-                                cacheDir = cacheDir.absolutePath,
-                            )
-                        )
-                        cpu.initialize()
-                        cpu
-                    }
-                    val conv = eng.createConversation(inferenceParamsBuilder.configFor(current, thinking))
-                    withContext(Dispatchers.Main) {
-                        engine = eng
-                        llamaModel = null
-                        ChatCore.attachLiteRt(eng, path.substringAfterLast('/'), vok)
-                            modelSupportsThinking = probeThinking(path)
-                        chatParams.markModelLoaded(path)
-                        tagReturnIdx = 0
-                        conversation = conv
-                        convThinking = thinking
-                        visionOk = vok
-                        convDrawCapable = canDrawFromChat
-                        setStatus(getString(R.string.v_015, (usedBackendName)), C_OK)
-                    }
-                }
-                withContext(Dispatchers.Main) {
-                    loadButton.text = getString(R.string.s_062)
-                    loadButton.background = rounded(C_SOFT_BTN2, 12,
-                        strokeDp = 1, strokeColor = C_BORDER)
-                    loadButton.setTextColor(C_TEXT)
-                    // 加载语言模型 → 对话页回到聊天（drawMode 由「有无语言模型」自动决定）
-                    drawPageInternal?.llmLoaded = true
-                    updateThinkEnabled()
-                    addSystemHint(getString(R.string.s_077))
-                }
-            } catch (e: Throwable) {
-                withContext(Dispatchers.Main) {
-                    // Excepcion (no crash): el proceso vive, el trial no cuelga.
-                    GpuTrial.clear(chatPrefs())
-                    setStatus(getString(R.string.s_058), C_ERR)
-                    toast(getString(R.string.v_016, (e.message)))
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    progressBarInternal.visibility = View.GONE
-                    progressBarInternal.isIndeterminate = false
-                    applyBusy(false)
-                }
-            }
-        }
+        modelLoadController.toggleLoad()
     }
 
-    private fun unloadModel() {
-        try { engine?.close() } catch (_: Throwable) {}
-        try { llamaModel?.close() } catch (_: Throwable) {}
-        ChatCore.release()
-        engine = null
-        llamaModel = null
-        chatParams.markModelUnloaded()
-        modelSupportsThinking = true
-        tagReturnIdx = 0
-        conversation = null
-        convThinking = null
-        visionOk = false
-        drawPageInternal?.llmLoaded = false
-        loadButton.text = getString(R.string.s_060)
-        loadButton.background = rounded(C_PRIMARY, 12)
-        loadButton.setTextColor(Color.WHITE)
-        setStatus(getString(R.string.s_079), C_IDLE)
-        addSystemHint(getString(R.string.s_080))
-        // 语言模型卸载后，若绘图模型还在，对话页会自动变回出图模式
-        updateThinkEnabled()
-    }
-
-    // ================= chat =================
-
-    /** Send button doubles as a stop button: while generating it shows a square ■. */
-    private fun onSendOrStop() {
-        val job = genJob
-        if (job != null && job.isActive) {
-            // 关键：先让原生侧真正停下来。只取消协程 Flow 的话，LiteRT / llama.cpp 的
-            // native 推理线程还在跑，下一次发送会撞上同一份上下文直接卡死。
-            stopRequested = true
-            runCatching { conversation?.cancelProcess() }
-            runCatching { ggufIterator?.cancel() }
-            // 绘图（MNN / sd.cpp）也要打断：否则 native 还在跑，界面已停
-            drawPageInternal?.cancel()
-            job.cancel()
-            // 不能只依赖协程的 finally 来复位：native 推理不响应协程取消时 finally 会迟迟不执行，
-            // busy 一直卡在 true，之后每条消息都被「正在生成中」挡回来。这里主动复位。
-            genJob = null
-            if (busy) applyBusy(false)
-            setStoppingUi(false)
-            // cancelProcess() 之后 LiteRT 的 Conversation 可能已不可用：
-            // 标记下一条消息发送前用历史静默重建，否则中断后再也发不出内容。
-            if (conversation != null) convNeedsRebuild = true
-            toast(getString(R.string.s_083))
-        } else {
-            doSend()
-        }
-    }
-
-    internal fun setStoppingUi(stop: Boolean) = chatSessionController.setStoppingUi(stop)
 
     // ---- 多对话管理 ----
 
