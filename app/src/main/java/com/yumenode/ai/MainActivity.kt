@@ -413,23 +413,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         internal fun scanTagCommand(answer: String, thought: String): TagHit? =
             commandScanner.scanTagCommand(answer, thought, canTagFromChat)
 
-    /** 把这一轮用户发的图交给打标模型识别：返回标签文本（多张图各一行），失败抛异常 */
-    internal fun runTaggerOnImages(names: List<String>, req: TagReq): String {
-        val rgbOrder = drawPageInternal?.taggerRgbOrder() == true
-        val sb = StringBuilder()
-        for ((i, n) in names.withIndex()) {
-            val bmp = readChatImage(n) ?: continue
-            val tags = TaggerEngine.run(bmp, req.threshold, req.topK, rgbOrder = rgbOrder)
-            if (tags.isEmpty()) continue
-            if (sb.isNotEmpty()) sb.append("\n")
-            if (names.size > 1) sb.append("#${i + 1} ")
-            sb.append(tags.joinToString(", ") { it.first })
-        }
-        return sb.toString()
-    }
-
-
-
     /**
      * 跑一轮生成（gguf / litertlm 两条路径），把输出流式渲染进 ai。
      * displayPrefix、thoughtPrefix 是前面几轮已经落在气泡里的内容，这样工具调用可以
@@ -511,7 +494,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val chatSessionController by lazy { ChatSessionController(this) }
 
     // DrawModelsHost: la lógica de slots de dibujo / LoRA / tagger / modelos guardados vive en DrawModelsController.kt
-    private val drawModelsController by lazy { DrawModelsController(this) }
+    internal val drawModelsController by lazy { DrawModelsController(this) }
 
     // ShellHost: la navegación / drawer / tabs viven aquí en ShellController.kt
     private val shellController by lazy { ShellController(this) }
@@ -582,7 +565,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     override val drawCapable: Boolean get() = canDrawFromChat
     override fun refreshSessionDrawer() = refreshDrawer()
     override fun sendMessage() { doSend() }
-    override fun readChatImageAt(name: String): android.graphics.Bitmap? = readChatImage(name)
+    override fun readChatImageAt(name: String): android.graphics.Bitmap? = readChatImageImpl(name)
+    override fun readChatImage(name: String): Bitmap? = readChatImageImpl(name)
     override fun bitmapToJpegFor(bmp: android.graphics.Bitmap, quality: Int): ByteArray = bitmapToJpeg(bmp, quality)
     override fun showChatFullscreen(bmp: android.graphics.Bitmap) = showImageFullscreen(bmp)
     override fun showChatImageMenuFor(bmp: android.graphics.Bitmap, name: String) = showImageMenu(bmp, name)
@@ -1910,7 +1894,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         false
     }
 
-    private fun readChatImage(name: String): Bitmap? = try {
+    private fun readChatImageImpl(name: String): Bitmap? = try {
         BitmapFactory.decodeFile(File(File(filesDir, "chatimg"), name).absolutePath)
     } catch (_: Throwable) {
         null

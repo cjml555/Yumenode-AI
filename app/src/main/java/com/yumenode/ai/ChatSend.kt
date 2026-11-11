@@ -515,7 +515,7 @@ import com.yumenode.ai.tagRolesGguf
                             turn.answer = ""
                             markwonFull.setMarkdown(ai.answer, "")
                             withContext(Dispatchers.IO) {
-                                runCatching { runTaggerOnImages(autoNames, TagReq(0.35f, 40)) }.getOrDefault("")
+                                runCatching { drawModelsController.runTaggerOnImages(autoNames, TagReq(0.35f, 40)) }.getOrDefault("")
                             }
                         }
                         r.ifEmpty { null }
@@ -572,7 +572,7 @@ import com.yumenode.ai.tagRolesGguf
                         "\u0000" + getString(R.string.s_326)
                     } else {
                         withContext(Dispatchers.IO) {
-                            runCatching { runTaggerOnImages(names, tagHit.req) }.getOrElse { e ->
+                            runCatching { drawModelsController.runTaggerOnImages(names, tagHit.req) }.getOrElse { e ->
                                 "\u0000" + (e.message ?: "")
                             }
                         }

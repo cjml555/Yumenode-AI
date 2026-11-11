@@ -3,6 +3,7 @@ package com.yumenode.ai
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.view.Gravity
@@ -13,6 +14,7 @@ import android.widget.TextView
 import com.yumenode.ai.draw.DrawPage
 import com.yumenode.ai.draw.GgufProbe
 import com.yumenode.ai.draw.ModelSet
+import com.yumenode.ai.draw.TaggerEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +70,8 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
 
     private fun getString(id: Int, vararg args: Any?) = activity.getString(id, *args)
     private fun toast(msg: String) = host.toast(msg)
+
+    private fun readChatImage(name: String): Bitmap? = host.readChatImage(name)
     private fun setStatus(text: String, color: Int) = host.setStatus(text, color)
     private fun dp(v: Int) = activity.dp(v)
     private fun rounded(color: Int, radiusDp: Int, strokeDp: Int = 0, strokeColor: Int = 0) =
@@ -634,5 +638,21 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
             isLongClickable = true
             setOnLongClickListener { onLongClick(); true }
         }
+    }
+
+
+    /** Escanear etiquetas en imágenes con TaggerEngine */
+    fun runTaggerOnImages(names: List<String>, req: TagReq): String {
+        val rgbOrder = drawPage?.taggerRgbOrder() == true
+        val sb = StringBuilder()
+        for ((i, n) in names.withIndex()) {
+            val bmp = readChatImage(n) ?: continue
+            val tags = TaggerEngine.run(bmp, req.threshold, req.topK, rgbOrder = rgbOrder)
+            if (tags.isEmpty()) continue
+            if (sb.isNotEmpty()) sb.append("\n")
+            if (names.size > 1) sb.append("#${i + 1} ")
+            sb.append(tags.joinToString(", ") { it.first })
+        }
+        return sb.toString()
     }
 }

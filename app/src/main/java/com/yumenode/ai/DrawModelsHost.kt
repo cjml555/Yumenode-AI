@@ -2,6 +2,7 @@
 package com.yumenode.ai
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -68,6 +69,9 @@ interface DrawModelsHost {
 
     /** Hay modelo conversacional cargado (engine o llamaModel). */
     val hasModel: Boolean
+
+    /** Leer imagen de chat guardada en filesDir/chatimg */
+    fun readChatImage(name: String): Bitmap?
 
     // ---- acciones que quedan en la Activity ----
     fun applyBusy(b: Boolean)
