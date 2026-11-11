@@ -442,7 +442,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     /** .gguf 架构探测结果缓存，避免重复读头部 */
     private val ggufKindCacheInternal = HashMap<String, GgufProbe.Kind>()
-    internal var genJob: Job? = null
+    override var genJob: Job? = null
     /** Ultimo resultado del benchmark (para compartir anonimamente). */
     private data class BenchStats(
         val model: String, val backend: String, val device: String, val soc: String,
@@ -479,7 +479,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     internal var stopRequested = false
 
     internal lateinit var markwonFull: Markwon
-    internal lateinit var markwonStream: Markwon
+    override lateinit var markwonStream: Markwon
 
     // ---- views ----
     private lateinit var statusTv: TextView
@@ -2086,85 +2086,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     private fun renderTurn(t: QaTurn) = chatSessionController.renderTurn(t)
 
+        // ---- 持久化 ----
+
     // ---- 持久化 ----
 
     internal fun doDrawFromChat(prompt: String, dpg: DrawPage) {
-        if (busy) { toast(getString(R.string.s_133)); return }
-        val turn = QaTurn(prompt)
-        current.turns += turn
-        if (current.title == getString(R.string.s_109)) current.title = prompt.take(18)
-
-        inputEdit.setText("")
-        addUserBubble(prompt)
-        chatScrollManager?.jumpToBottom()
-        applyBusy(true)
-        setStoppingUi(true)
-        setStatus(getString(R.string.s_166), C_WARN)
-
-        val ai = addAiArea()
-        ai.regenButton.visibility = View.GONE
-        markwonStream.setMarkdown(ai.answer, getString(R.string.s_202))
-
-        genJob = scope.launch {
-            // 气泡里每秒刷新一次进度（sd.cpp 每步回调 + 本地计时），
-            // 否则整段生成期间只能看到静止的「🎨 正在生成图片…」
-            var curStep = 0
-            var totalStep = 0
-            val drawStartedAt = System.currentTimeMillis()
-            val ticker = launch {
-                while (true) {
-                    kotlinx.coroutines.delay(1000)
-                    val sec = (System.currentTimeMillis() - drawStartedAt) / 1000
-                    val stepInfo = if (totalStep > 0) getString(R.string.v_019, (curStep), (totalStep)) else ""
-                    markwonStream.setMarkdown(ai.answer, getString(R.string.v_020, (stepInfo), (sec)))
-                }
-            }
-            try {
-                val img = dpg.generateImage(
-                    prompt,
-                    onProgress = { cur, total ->
-                        curStep = cur
-                        totalStep = total
-                        runOnUiThread {
-                            if (cur == total || cur % 2 == 0) setStatus(getString(R.string.v_021, (cur), (total)), C_WARN)
-                        }
-                    },
-                    onPreview = { st, w, h, rgb -> dpg.previewFrame(st, w, h, rgb) },
-                )
-                ticker.cancel()
-                val bmp = dpg.toBitmap(img)
-                val name = "ponko_${System.currentTimeMillis()}.png"
-                val saved = withContext(Dispatchers.IO) { writeChatImage(bmp, name) }
-                turn.image = if (saved) name else null
-                turn.answer = "🎨 seed=${img.seed}"
-                markwonStream.setMarkdown(ai.answer, "")
-                attachImageBubble(ai, bmp, name)
-                setStatus(getString(R.string.s_153), C_OK)
-            } catch (e: com.yumenode.ai.draw.GenerationCancelledException) {
-                ticker.cancel()
-                turn.answer = getString(R.string.s_004)
-                markwonStream.setMarkdown(ai.answer, getString(R.string.s_004))
-                setStatus(getString(R.string.s_082), C_IDLE)
-            } catch (e: CancellationException) {
-                ticker.cancel()
-                turn.answer = getString(R.string.s_004)
-                markwonStream.setMarkdown(ai.answer, getString(R.string.s_004))
-                setStatus(getString(R.string.s_082), C_IDLE)
-                throw e
-            } catch (e: Throwable) {
-                ticker.cancel()
-                turn.answer = getString(R.string.v_022, (e.message))
-                markwonStream.setMarkdown(ai.answer, getString(R.string.v_023, (e.message)))
-                setStatus(getString(R.string.s_152), C_ERR)
-            } finally {
-                ticker.cancel()
-                ai.regenButton.visibility = View.VISIBLE
-                sessionManager.save()
-                applyBusy(false)
-                setStoppingUi(false)
-                chatScrollManager?.scrollToBottom()
-            }
-        }
+        chatSessionController.doDrawFromChat(prompt, dpg)
     }
 
     /** 把图片写进应用私有目录，返回是否成功 */

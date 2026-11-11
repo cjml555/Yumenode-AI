@@ -10,6 +10,8 @@ import android.widget.TextView
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
 import io.noties.markwon.Markwon
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import net.ladenthin.llama.LlamaModel
 
 /**
@@ -114,4 +116,16 @@ interface ChatSessionHost {
 
     /** Insertar imagen en una tarjeta de respuesta. */
     fun attachChatBubble(area: AiArea, bmp: Bitmap, name: String)
+
+    /** Render Markdown de respuestas finales. */
+    val markwonStream: Markwon
+
+    /** Job en curso (para cancelar). */
+    var genJob: Job?
+
+    /** CoroutineScope para operaciones asíncronas. */
+    val scope: CoroutineScope
+
+    /** Set status with color */
+    fun setStatus(text: String, color: Int)
 }

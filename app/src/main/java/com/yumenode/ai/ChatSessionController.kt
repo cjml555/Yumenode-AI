@@ -15,6 +15,14 @@ import android.widget.TextView
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.ThinkingConfig
+import com.yumenode.ai.draw.DrawPage
+import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Lógica de sesiones de chat y render de turnos (borbujas, tarjetas de respuesta).
@@ -57,6 +65,10 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         set(v) { host.drawCapableState = v }
     private val drawerOpen get() = host.drawerIsOpen
     private val canDrawFromChat get() = host.drawCapable
+    private val markwonStream get() = host.markwonStream
+    private var genJob get() = host.genJob
+        set(v) { host.genJob = v }
+    private val scope get() = host.scope
 
     private fun getString(id: Int, vararg args: Any?) = activity.getString(id, *args)
     private fun toast(msg: String) = host.toast(msg)
@@ -397,5 +409,97 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         loadButton.isEnabled = !b
         loadButton.alpha = if (b) 0.5f else 1f
         // 生成过程中不禁用输入框：可以照常打字（此时发送键是「停止」，只是不发送）
+    }
+
+    /** Set status with color (e.g., WARN, OK, IDLE, ERROR) */
+    fun setStatus(text: String, color: Int) {
+        host.setStatus(text, color)
+    }
+
+    /** Draw chat response from prompt, using host for UI and host for rendering */
+    fun doDrawFromChat(prompt: String, dpg: DrawPage) {
+        if (busy) { toast(getString(R.string.s_133)); return }
+        val turn = QaTurn(prompt)
+        current.turns += turn
+        if (current.title == getString(R.string.s_109)) current.title = prompt.take(18)
+
+        inputEdit.setText("")
+        addUserBubble(prompt)
+        chatScrollManager?.jumpToBottom()
+        applyBusy(true)
+        setStoppingUi(true)
+        setStatus(getString(R.string.s_166), C_WARN)
+
+        val ai = addAiArea()
+        ai.regenButton.visibility = View.GONE
+        markwonStream.setMarkdown(ai.answer, getString(R.string.s_202))
+
+        genJob = scope.launch {
+            var curStep = 0
+            var totalStep = 0
+            val drawStartedAt = System.currentTimeMillis()
+            val ticker = scope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(1000)
+                    val sec = (System.currentTimeMillis() - drawStartedAt) / 1000
+                    val stepInfo = if (totalStep > 0) getString(R.string.v_019, curStep, totalStep) else ""
+                    markwonStream.setMarkdown(ai.answer, getString(R.string.v_020, stepInfo, sec))
+                }
+            }
+            try {
+                val img = dpg.generateImage(
+                    prompt,
+                    onProgress = { cur, total ->
+                        curStep = cur
+                        totalStep = total
+                        host.activity.runOnUiThread {
+                            if (cur == total || cur % 2 == 0) setStatus(getString(R.string.v_021, cur, total), C_WARN)
+                        }
+                    },
+                    onPreview = { st, w, h, rgb -> dpg.previewFrame(st, w, h, rgb) },
+                )
+                ticker.cancel()
+                val bmp = dpg.toBitmap(img)
+                val name = "ponko_${System.currentTimeMillis()}.png"
+                val saved = withContext(kotlinx.coroutines.Dispatchers.IO) { writeChatImage(bmp, name) }
+                turn.image = if (saved) name else null
+                turn.answer = "🎨 seed=${img.seed}"
+                markwonStream.setMarkdown(ai.answer, "")
+                attachImageBubble(ai, bmp, name)
+                setStatus(getString(R.string.s_153), C_OK)
+            } catch (e: com.yumenode.ai.draw.GenerationCancelledException) {
+                ticker.cancel()
+                turn.answer = getString(R.string.s_004)
+                markwonStream.setMarkdown(ai.answer, getString(R.string.s_004))
+                setStatus(getString(R.string.s_082), C_IDLE)
+            } catch (e: CancellationException) {
+                ticker.cancel()
+                turn.answer = getString(R.string.s_004)
+                markwonStream.setMarkdown(ai.answer, getString(R.string.s_004))
+                setStatus(getString(R.string.s_082), C_IDLE)
+                throw e
+            } catch (e: Throwable) {
+                ticker.cancel()
+                turn.answer = getString(R.string.v_022, e.message)
+                markwonStream.setMarkdown(ai.answer, getString(R.string.v_023, e.message))
+                setStatus(getString(R.string.s_152), C_ERR)
+            } finally {
+                ticker.cancel()
+                ai.regenButton.visibility = View.VISIBLE
+                sessionManager.save()
+                applyBusy(false)
+                setStoppingUi(false)
+                chatScrollManager?.scrollToBottom()
+            }
+        }
+    }
+
+    /** 把图片写进应用私有目录，返回是否成功 */
+    private fun writeChatImage(bmp: Bitmap, name: String): Boolean = try {
+        val dir = File(host.activity.filesDir, "chatimg").apply { mkdirs() }
+        File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        true
+    } catch (_: Throwable) {
+        false
     }
 }
