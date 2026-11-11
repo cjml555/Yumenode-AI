@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost, BenchmarkHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -239,45 +239,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     override fun runBenchmark(onUpdate: (String) -> Unit) {
-        if (!ChatCore.isReady()) { onUpdate(getString(R.string.s_480)); return }
-        if (ChatCore.busy) { onUpdate(getString(R.string.s_481)); return }
-        scope.launch {
-            val prompt = "Write a short, coherent paragraph about the sea."
-            val runs = 3
-            val tps = ArrayList<Double>()
-            val lat = ArrayList<Long>()
-            var lastTokens = 0
-            for (i in 1..runs) {
-                onUpdate(getString(R.string.s_487, i, runs))
-                val t0 = SystemClock.uptimeMillis()
-                val out = try {
-                    ChatCore.generate(listOf(ChatCore.Msg("user", prompt)), 0.7f, 128) { }
-                } catch (e: Throwable) {
-                    onUpdate("Error: ${e.message ?: e.javaClass.simpleName}")
-                    return@launch
-                }
-                val dt = (SystemClock.uptimeMillis() - t0).coerceAtLeast(1)
-                lastTokens = (out.length / 4).coerceAtLeast(1)
-                lat += dt
-                tps += lastTokens / (dt / 1000.0)
-            }
-            val name = ChatCore.modelName ?: "?"
-            val backend = when {
-                name.endsWith(".gguf", true) -> "llama.cpp (CPU)"
-                name.endsWith(".litertlm", true) -> "LiteRT (CPU)"
-                else -> "?"
-            }
-            val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE
-            val tpsAvg = "%.1f".format(tps.average())
-            val tpsMin = "%.1f".format(tps.min())
-            val tpsMax = "%.1f".format(tps.max())
-            lastBench = BenchStats(
-                model = name, backend = backend, device = Build.MODEL, soc = soc,
-                tpsAvg = tps.average(), tpsMin = tps.min(), tpsMax = tps.max(),
-                latMin = lat.min(), latMax = lat.max(), tokens = lastTokens,
-            )
-            onUpdate(getString(R.string.s_486, name, backend, Build.MODEL, soc, lastTokens, tpsAvg, tpsMin, tpsMax, lat.min(), lat.max()))
-        }
+        benchmarkController.runBenchmark(onUpdate)
     }
 
     override val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -430,12 +392,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val ggufKindCacheInternal = HashMap<String, GgufProbe.Kind>()
     override var genJob: Job? = null
     /** Ultimo resultado del benchmark (para compartir anonimamente). */
-    private data class BenchStats(
-        val model: String, val backend: String, val device: String, val soc: String,
-        val tpsAvg: Double, val tpsMin: Double, val tpsMax: Double,
-        val latMin: Long, val latMax: Long, val tokens: Int,
-    )
-    private var lastBench: BenchStats? = null
+    override var lastBench: BenchStats? = null
     /** Footnote '≈X tok/s' de la última generación (solo render en vivo). */
     internal var lastTpsFoot: String? = null
 
@@ -495,6 +452,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // DrawModelsHost: la lógica de slots de dibujo / LoRA / tagger / modelos guardados vive en DrawModelsController.kt
     internal val drawModelsController by lazy { DrawModelsController(this) }
+    internal val benchmarkController by lazy { BenchmarkController(this) }
 
     // ShellHost: la navegación / drawer / tabs viven aquí en ShellController.kt
     private val shellController by lazy { ShellController(this) }
