@@ -19,35 +19,6 @@ import android.animation.ValueAnimator
 import android.view.animation.DecelerateInterpolator
 
 /**
- * Dependencias que la página de ajustes necesita de MainActivity.
- *
- * Se declara como interfaz (en vez de pasar la Activity entera) para que la
- * pantalla no pueda tocar estado de chat, motores ni sesiones.
- */
-interface SettingsHost {
-    val activity: Activity
-    val accentIndex: Int
-    fun applyAccent(index: Int)
-
-    val palette: YumenodeTheme
-    val ui: UiWidgets
-    val themeMode: Int
-    val drawBusy: Boolean
-    fun applyThemeMode(mode: Int)
-    fun toast(msg: String)
-    fun appVersion(): String
-    fun installedAt(): String
-    fun prefBool(key: String, def: Boolean): Boolean
-    fun prefPutBool(key: String, value: Boolean)
-    fun prefStr(key: String, def: String): String
-    fun prefPutStr(key: String, value: String)
-    fun shareBenchmark(endpoint: String, onResult: (String) -> Unit)
-    fun runBenchmark(onUpdate: (String) -> Unit)
-    fun setAppLanguage(tag: String?)
-    fun currentAppLanguage(): String?
-}
-
-/**
  * Pestaña «Acerca de / Ajustes»: tema, hilos de inferencia y créditos.
  * Extraída de MainActivity.
  */
