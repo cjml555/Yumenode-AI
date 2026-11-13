@@ -52,7 +52,7 @@
             android:label="Yumenode AI"
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher_round"
-            android:allowBackup="true"
+            android:allowBackup="false"
             android:theme="@style/AppTheme">
 
         <!-- Native GPU libs used by LiteRT-LM's GPU backend (optional, CPU fallback if absent) -->
@@ -95,7 +95,7 @@
         -->
         <receiver
             android:name=".ApiService$BootReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.yumenode.ai.API_START" />
                 <action android:name="com.yumenode.ai.API_STOP" />
