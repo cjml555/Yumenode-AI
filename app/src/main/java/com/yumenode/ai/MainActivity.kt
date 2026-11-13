@@ -106,7 +106,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost, BenchmarkHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost, BenchmarkHost, LocaleHost {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -114,7 +114,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     // 新增控件请用这些常量，不要再写死色值，否则深色模式会留下白块。
 
     /** 主题管理器：separates theme state & palette logic from UI */
-    internal val themeManager = ThemeManager(this) {
+    override val themeManager = ThemeManager(this) {
         // Theme applied — rebuild UI palette accessors
     }
 
@@ -163,14 +163,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     override val palette: YumenodeTheme get() = pal
     override val drawBusy: Boolean get() = drawPageInternal?.isBusy() == true
     override val accentIndex: Int get() = themeManager.accentIndex
-    override fun applyThemeMode(mode: Int) {
-        themeManager.setThemeMode(this, mode)
-        applyThemeInPlace()   // el callback del manager está vacío: reconstruimos aquí
-    }
-    override fun applyAccent(index: Int) {
-        themeManager.setAccent(this, index)
-        applyThemeInPlace()
-    }
+    override fun applyThemeMode(mode: Int) = localeController.applyThemeMode(mode)
+    override fun applyAccent(index: Int) = localeController.applyAccent(index)
     override fun toast(msg: String) {
         runOnUiThread { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show() }
     }
@@ -220,23 +214,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      *  reporta tok/s, latencia, modelo, backend y dispositivo. No sube nada. */
     private var lastLocales: android.os.LocaleList? = null
 
-    override fun currentAppLanguage(): String? =
-        if (Build.VERSION.SDK_INT >= 33) currentAppLocale33(getSystemService(android.app.LocaleManager::class.java))
-        else prefStr(KEY_APP_LANG, "").takeIf { it.isNotBlank() }
+    override fun currentAppLanguage(): String? = localeController.currentAppLanguage()
 
-    override fun setAppLanguage(tag: String?) {
-        val t = tag?.trim().orEmpty()
-        prefPutStr(KEY_APP_LANG, t)
-        if (Build.VERSION.SDK_INT >= 33) {
-            applyAppLocale33(getSystemService(android.app.LocaleManager::class.java), t)
-        } else {
-            val cfg = Configuration(resources.configuration)
-            cfg.setLocale(if (t.isEmpty()) java.util.Locale.getDefault() else java.util.Locale.forLanguageTag(t))
-            @Suppress("DEPRECATION")
-            resources.updateConfiguration(cfg, resources.displayMetrics)
-            applyThemeInPlace()
-        }
-    }
+    override fun setAppLanguage(tag: String?) = localeController.setAppLanguage(tag)
 
     override fun runBenchmark(onUpdate: (String) -> Unit) {
         benchmarkController.runBenchmark(onUpdate)
@@ -453,6 +433,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     // DrawModelsHost: la lógica de slots de dibujo / LoRA / tagger / modelos guardados vive en DrawModelsController.kt
     internal val drawModelsController by lazy { DrawModelsController(this) }
     internal val benchmarkController by lazy { BenchmarkController(this) }
+    internal val localeController by lazy { LocaleController(this) }
 
     // ShellHost: la navegación / drawer / tabs viven aquí en ShellController.kt
     private val shellController by lazy { ShellController(this) }
@@ -691,7 +672,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      * 不走 recreate()：Activity 重建会把 chat 引擎、绘图 native 上下文、ONNX 打标会话
      * 一起丢掉（用户感受就是"设置一动就重启"）。这里只重建 View，这些对象都留着。
      */
-    private fun applyThemeInPlace() {
+    override fun applyThemeInPlace() {
         themeManager.applyThemeInPlace()
             // 记住当前页：buildUi() 末尾会把界面切回来
             chatPrefs().edit().putInt("restoreTab", currentTab).apply()

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — lógica de idioma y tema a LocaleController
+
+- **`LocaleController` + `LocaleHost`** (`LocaleController.kt`, `LocaleHost.kt`)
+  - `currentAppLanguage()`, `setAppLanguage()`, `applyThemeMode()` y `applyAccent()` salen de
+    `MainActivity` a un controlador con un contrato estrecho (`LocaleHost`).
+  - `MainActivity` conserva `themeManager`, `applyThemeInPlace()` y `onConfigurationChanged()`
+    (la UI real del rebuild), pero las tres delegaciones de idioma/tema son de una línea.
+  - La lógica de `LocaleManager` (API 33+) y la rama legacy (`Configuration.setLocale`) vive
+    una sola vez en `LocaleController`; `MainActivity` ya no duplica el `if (SDK_INT >= 33)`.
+  - `applyThemeInPlace()` pasa de `private` a `override` porque ahora es parte del contrato
+    `LocaleHost` que el controlador llama a través del host.
+
 ### Added
 
 - **GPU experimental (Vulkan) opt-in** (`feat/gpu-experimental`): toggle en
