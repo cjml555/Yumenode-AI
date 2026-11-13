@@ -11,6 +11,27 @@ android {
     // 自编 stable-diffusion.cpp 所用的 NDK（CMake 产出的 libomp.so 与 libc++_shared 同源）
     ndkVersion = "29.0.14206865"
 
+    // Sabores: un solo eje "tier" con free / premium.
+    // Cada sabor obtiene applicationId propio + versionCode desplazado para
+    // que Google Play acepte los dos APK/AAB simultáneamente.
+    flavorDimensions += "tier"
+    productFlavors {
+        create("free") {
+            dimension = "tier"
+            applicationId = "com.yumenode.ai"
+            versionCode = 10401
+            versionName = "1.4.1"
+            // Sin sufijo: el paquete base queda para el sabor free
+        }
+        create("premium") {
+            dimension = "tier"
+            applicationId = "com.yumenode.ai.premium"
+            versionCode = 20401
+            versionName = "1.4.1"
+            // Desplazamiento de versionCode para separar del free en Play
+        }
+    }
+
     defaultConfig {
         applicationId = "com.yumenode.ai"
         minSdk = 28
@@ -54,8 +75,17 @@ android {
     }
 
     buildTypes {
-        release {
+        debug {
+            // No se firma en modo debug (local verification)
             isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = true
+            // ProGuard/R8 para APK final
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             // 有口令才签名；否则产出未签名 APK（本地验证 / 之后重签）
             signingConfig = if (ksPasswordValue.isNotBlank())
                 signingConfigs.getByName("default") else null
@@ -90,7 +120,6 @@ dependencies {
     // Coroutines (the streaming sendMessageAsync returns a Flow)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
-    // (net.ladenthin:llama-android AAR requires minSdk 28, native = arm64-v8a)
     //
     // AAR local (local-maven/) con el MISMO API de Kotlin que el oficial,
     // pero con la libreria nativa recompilada con el backend Vulkan dentro
