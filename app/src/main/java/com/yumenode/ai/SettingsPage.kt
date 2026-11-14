@@ -453,6 +453,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(syncBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Usage analytics (export usage stats)
+        if (FeatureToggleManager.isPremium) {
+            val analyticsBtn = host.ui.actionButton(getString(R.string.s_581)) { exportUsageAnalytics() }
+            aboutBody.addView(analyticsBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -546,6 +552,43 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 host.activity.runOnUiThread { host.toast("Cloud sync failed: ${e.message ?: e.javaClass.simpleName}") }
             }
         }.start()
+    }
+
+    /** Premium: usage analytics — summarize local session data and export as CSV. */
+    private fun exportUsageAnalytics() {
+        val sessionsFile = File(host.activity.filesDir, "sessions.json")
+        if (!sessionsFile.exists()) {
+            host.toast("No session data yet")
+            return
+        }
+        val rows = mutableListOf<String>()
+        try {
+            val root = org.json.JSONObject(sessionsFile.readText())
+            val arr = root.optJSONArray("sessions") ?: org.json.JSONArray()
+            var totalTurns = 0
+            var totalImages = 0
+            for (i in 0 until arr.length()) {
+                val s = arr.getJSONObject(i)
+                val turns = s.optJSONArray("turns") ?: org.json.JSONArray()
+                var imgs = 0
+                for (j in 0 until turns.length()) {
+                    val t = turns.getJSONObject(j)
+                    if (t.optString("img").isNotEmpty()) imgs++
+                }
+                totalTurns += turns.length()
+                totalImages += imgs
+                rows += "${s.optLong("id")},${s.optString("title").replace(",", " ")},${turns.length()},$imgs"
+            }
+            val csv = StringBuilder()
+            csv.appendLine("session_id,title,turns,images")
+            rows.forEach { csv.appendLine(it) }
+            csv.appendLine("# summary,${arr.length()} sessions,$totalTurns turns,$totalImages images")
+            val file = File(host.activity.getExternalFilesDir(null), "analytics_${System.currentTimeMillis()}.csv")
+            file.writeText(csv.toString())
+            host.toast("Analytics exported: ${arr.length()} sessions, $totalTurns turns, $totalImages images")
+        } catch (e: Throwable) {
+            host.toast("Analytics failed: ${e.message ?: e.javaClass.simpleName}")
+        }
     }
 
     /** Premium: custom prompts manager (save/load prompt templates) */
