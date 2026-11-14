@@ -19,14 +19,14 @@ android {
         create("free") {
             dimension = "tier"
             applicationId = "com.yumenode.ai"
-            versionCode = 10501
+            versionCode = 10402
             versionName = "1.4.2"
             // Sin sufijo: el paquete base queda para el sabor free
         }
         create("premium") {
             dimension = "tier"
             applicationId = "com.yumenode.ai.premium"
-            versionCode = 20501
+            versionCode = 10402
             versionName = "1.4.2"
             // Desplazamiento de versionCode para separar del free en Play
         }
@@ -36,7 +36,7 @@ android {
         applicationId = "com.yumenode.ai"
         minSdk = 28
         targetSdk = 36
-        versionCode = 10501
+        versionCode = 10402
         versionName = "1.4.2"
         ndk {
             // LiteRT-LM 与 llama.cpp 的 native 都只跑 arm64 真机，去掉 x86_64 可减小 APK
