@@ -459,6 +459,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(analyticsBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Multi-device API — show the LAN API URL & share it
+        if (FeatureToggleManager.isPremium) {
+            val apiBtn = host.ui.actionButton(getString(R.string.s_582)) { openMultiDeviceApi() }
+            aboutBody.addView(apiBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -589,6 +595,52 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         } catch (e: Throwable) {
             host.toast("Analytics failed: ${e.message ?: e.javaClass.simpleName}")
         }
+    }
+
+    /** Premium: Multi-device API — show LAN API URL & share via system sheet. */
+    private fun openMultiDeviceApi() {
+        val prefs = host.activity.getSharedPreferences("ponko", Context.MODE_PRIVATE)
+        val chatEnabled = prefs.getBoolean(ApiService.KEY_ENABLED, false)
+        val chatPort = prefs.getInt(ApiService.KEY_PORT, ApiService.DEF_PORT).coerceIn(1024, 65535)
+        val apiKey = prefs.getString(ApiService.KEY_TOKEN, null)?.takeIf { it.isNotBlank() }
+        val base = ApiService.chatAddress
+            ?: "http://${ApiService.localIp()}:$chatPort"
+        val body = buildString {
+            append("Chat API: $base\n")
+            append(if (ApiService.chatRunning) "Status: running" else if (chatEnabled) "Status: enabled but not started" else "Status: disabled")
+            append("\n")
+            append("Key: ").append(if (apiKey != null) "set" else "none (open)")
+            append("\n\n/v1/chat/completions · /v1/models · /health\n")
+            append("Same Wi-Fi required. Start the API in Models/API → API first.")
+        }
+        val layout = LinearLayout(host.activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(host.activity.dp(16), host.activity.dp(8), host.activity.dp(16), host.activity.dp(8))
+        }
+        val tv = TextView(host.activity).apply {
+            text = body
+            textSize = 13f
+            setTextColor(C_TEXT)
+            setTextIsSelectable(true)
+        }
+        layout.addView(tv)
+        android.app.AlertDialog.Builder(host.activity)
+            .setTitle(R.string.s_582)
+            .setView(layout)
+            .setPositiveButton("Copy URL") { _, _ ->
+                val cm = host.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("api", base))
+                host.toast("Copied: $base")
+            }
+            .setNeutralButton("Share") { _, _ ->
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, body)
+                }
+                host.activity.startActivity(android.content.Intent.createChooser(send, host.activity.getString(R.string.s_582)))
+            }
+            .setNegativeButton(R.string.s_066, null)
+            .show()
     }
 
     /** Premium: custom prompts manager (save/load prompt templates) */
