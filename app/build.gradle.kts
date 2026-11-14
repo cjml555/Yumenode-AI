@@ -19,15 +19,15 @@ android {
         create("free") {
             dimension = "tier"
             applicationId = "com.yumenode.ai"
-            versionCode = 10402
-            versionName = "1.4.2"
+            versionCode = 10403
+            versionName = "1.4.3"
             // Sin sufijo: el paquete base queda para el sabor free
         }
         create("premium") {
             dimension = "tier"
             applicationId = "com.yumenode.ai.premium"
-            versionCode = 10402
-            versionName = "1.4.2"
+            versionCode = 10403
+            versionName = "1.4.3"
             // Desplazamiento de versionCode para separar del free en Play
         }
     }

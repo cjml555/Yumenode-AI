@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-11-14
+
+### Added
+- **Premium: Cluster router (LAN)** — reenvía `/v1/chat/completions` e `/v1/images/generations` (no stream) a peers sanos de la red local; health check cada 30s y fallback a local. Config en Ajustes > Cluster router (solo flavor premium, flag `enableClusterRouter`).
+
+### Changed
+- Todos los comentarios CJK del código traducidos a inglés (35 ficheros, ~1110 líneas); sin cambio de comportamiento.
+
 ## [1.4.2] - 2026-11-13
 
 ### Added
