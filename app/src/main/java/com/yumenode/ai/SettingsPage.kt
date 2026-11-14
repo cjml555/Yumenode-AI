@@ -465,6 +465,24 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(apiBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Priority GPU — toggle for inference thread priority boost
+        if (FeatureToggleManager.isPremium) {
+            val gpuSwitch = SegmentedSwitch(
+                ctx,
+                arrayOf(getString(R.string.s_564), getString(R.string.s_565)),
+                host.palette,
+                if (host.prefBool(KEY_GPU_PRIORITY, false)) 1 else 0,
+            )
+            gpuSwitch.onChanged = { i ->
+                host.prefPutBool(KEY_GPU_PRIORITY, i == 1)
+            }
+            val gpuTitle = host.ui.pageTitle(getString(R.string.s_583))
+            val gpuHint = host.ui.hintText(getString(R.string.s_584))
+            aboutBody.addView(gpuTitle, matchWrap().apply { topMargin = dp(8) })
+            aboutBody.addView(gpuHint)
+            aboutBody.addView(gpuSwitch, matchWrap().apply { topMargin = dp(4) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv

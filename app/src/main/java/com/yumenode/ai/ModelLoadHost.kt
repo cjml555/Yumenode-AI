@@ -22,6 +22,9 @@ import net.ladenthin.llama.LlamaModel
 interface ModelLoadHost {
     /** Activity para recursos (getString), AlertDialog y helpers dp/rounded. */
     val activity: Activity
+    
+    /** Shared preferences holder (for prefs like KEY_GPU_PRIORITY). */
+    fun prefBool(key: String, def: Boolean): Boolean = activity.getSharedPreferences("model_load_prefs", Activity.MODE_PRIVATE).getBoolean(key, def)
 
     /** CoroutineScope para operaciones asíncronas. */
     val scope: CoroutineScope

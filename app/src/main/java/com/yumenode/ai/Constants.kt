@@ -34,6 +34,8 @@ internal const val KEY_CHAT_THINK = "chatThink"
 internal const val KEY_GPU_EXPERIMENTAL = "gpuExperimental"
 internal const val KEY_GPU_TRIAL = "gpuTrial"
 internal const val KEY_GPU_TRIAL_AT = "gpuTrialAt"
+/** Premium: GPU thread priority boost (THREAD_PRIORITY_URGENT_DISPLAY). */
+internal const val KEY_GPU_PRIORITY = "gpuPriority"
 
 // ---- Benchmark: endpoint por defecto (hardcoded) + override en Ajustes ----
 internal const val DEFAULT_BENCH_ENDPOINT = "https://yumenode-bench.cjml555.workers.dev/api/report"

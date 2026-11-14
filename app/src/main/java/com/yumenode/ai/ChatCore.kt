@@ -1,6 +1,7 @@
 // Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 package com.yumenode.ai
 
+import android.os.Process
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
@@ -54,6 +55,13 @@ object ChatCore {
     /** 用户/客户端要求中断当前生成 */
     @Volatile private var cancelFlag = false
 
+    /** Premium: GPU thread priority boost for inference (toggle en Ajustes, leído al cargar modelo). */
+    @Volatile var gpuPriority: Boolean = false
+        private set
+
+    /** Called by the model loader to sync the pref into the engine. */
+    fun setGpuPriority(on: Boolean) { gpuPriority = on }
+
     private val lock = Mutex()
 
     /** LiteRT 会话缓存：客户端每轮会把整段历史重发，能对上就复用会话，省掉重复 prefill */
@@ -83,6 +91,7 @@ object ChatCore {
         llama = null
         modelName = null
         visionOk = false
+        gpuPriority = false
     }
 
     fun isReady(): Boolean = engine != null || llama != null
@@ -215,6 +224,10 @@ object ChatCore {
             onThought = {},
             onAnswer = { d -> if (d.isNotEmpty()) { sb.append(d); onDelta(d) } },
         )
+        // Priority GPU: boost thread priority on inference (only when premium+enabled)
+        if (gpuPriority) {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
+        }
         val it = lm.generateChat(params).iterator()
         try {
             while (it.hasNext()) {

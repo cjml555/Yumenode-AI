@@ -613,4 +613,6 @@
     <string name="s_580">Cloud sync</string>
     <string name="s_581">Usage analytics</string>
     <string name="s_582">Multi-device API</string>
+    <string name="s_583">Priority GPU</string>
+    <string name="s_584">Boost inference thread priority for faster GPU access</string>
     </resources>

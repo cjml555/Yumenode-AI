@@ -598,4 +598,6 @@
     <string name="s_580">Sincronización en la nube</string>
     <string name="s_581">Analítica de uso</string>
     <string name="s_582">API multidispositivo</string>
+    <string name="s_583">Prioridad GPU</string>
+    <string name="s_584">Incrementa la prioridad del hilo de inferencia para un acceso más rápido a la GPU</string>
 </resources>
