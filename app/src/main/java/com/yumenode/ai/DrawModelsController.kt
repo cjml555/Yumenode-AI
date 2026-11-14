@@ -83,7 +83,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
     private fun refreshDrawModels() = host.refreshDrawModels()
     private fun refreshDrawToggle() = host.refreshDrawToggle()
 
-    /** 对话模型：选一个 .litertlm / .gguf 文件 */
+    /** Chat model: select a .litertlm / .gguf file */
     fun pickModelFile() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -92,8 +92,8 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         activity.startActivityForResult(i, REQ_PICK_MODEL)
     }
 
-    /** 「选择绘图模型文件」→ 先挑类型（单文件 / 多文件 × 家族），再选文件。
-     *  单文件 = 一个 all-in-one .gguf；多文件 = 主模型 + 若干配套文件（按家族给槽位模板）。 */
+    /** "Select draw model file" → first choose type (single file / multi-file × family), then select file.
+     *   Single file = one all-in-one .gguf; multi-file = master model + several support files (by family gives the slot template). */
     fun showDrawTypeMenu() {
         val single = listOf("sd15", "sdxl", "sd3", "flux", "qwen", "video", "other")
         val multi = listOf("sd3", "flux", "qwen", "hidream", "video", "other")
@@ -122,13 +122,13 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
             .show()
     }
 
-    /** 给当前模型集的某个槽位挑一个文件 */
+    /** Pick a file for the given slot of the current model set */
     fun pickDrawSlot(key: String) {
         pendingSlotKey = key
         pickDrawModelFile()
     }
 
-    /** 当前模型集的槽位列表（多文件模型在这里逐个补文件） */
+    /** Current model set slot list (multi-file model fills the slots here) */
     fun refreshDrawSlots() {
         val box = drawSlotsContainer ?: return
         val hdr = drawSlotsHeader ?: return
@@ -183,13 +183,13 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 展开 / 收起模型槽位面板（expand = null 表示切换） */
+    /** Expand / collapse model slot panel (expand = null means toggle) */
     fun toggleDrawSlots(expand: Boolean? = null) {
         drawSlotsExpanded = expand ?: !drawSlotsExpanded
         refreshDrawSlots()
     }
 
-    /** 绘图模型：选一个文件（单文件 all-in-one，或多文件里的某个槽位） */
+    /** Draw model: select a file (single-file all-in-one or one file from a multi-file model) */
     fun pickDrawModelFile() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -198,7 +198,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         activity.startActivityForResult(i, REQ_PICK_DRAW_MODEL)
     }
 
-    /** 本地 LoRA：选一个 .safetensors 文件 */
+    /** Local LoRA: select a .safetensors file */
     fun pickLoraFile() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -207,7 +207,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         activity.startActivityForResult(i, REQ_PICK_LORA)
     }
 
-    /** 打标模型：选一个 .onnx 文件 */
+    /** Tagger model: select an .onnx file */
     fun pickTaggerOnnx() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -216,7 +216,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         activity.startActivityForResult(i, REQ_TAGGER_ONNX)
     }
 
-    /** 标签表：选一个 .csv 文件 */
+    /** Label table: select a .csv file */
     fun pickTaggerCsv() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -307,7 +307,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         for (f in files) {
             val sel = f.absolutePath == modelPath
             val isGguf = f.name.endsWith(".gguf", ignoreCase = true)
-            // .gguf 可能是语言模型也可能是画图模型，读头部元数据判断
+            /** .gguf might be a chat model or a drawing model; probe the header to decide */
             val kind = if (isGguf) ggufKindCache.getOrPut(f.absolutePath) { GgufProbe.probe(f) }
             else null
             val isImageModel = kind == GgufProbe.Kind.IMAGE
@@ -352,7 +352,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 点击某个模型集 → 只标记为选用，不加载（与对话模型一致，需再点「加载绘图模型」）。 */
+    /** Click a model set → mark as selected, not load (same as chat model; need an extra tap on "Load draw model" afterwards) */
     fun selectDrawSet(s: ModelSet) {
         drawPage?.selectSet(s)
         drawSetId = s.id
@@ -361,7 +361,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         refreshDrawModels()
     }
 
-    /** 刷新模型页的 LoRA 状态与列表 */
+    /** Refresh LoRA UI (status row + optional list) */
     fun refreshLoraUi() {
         val dpg = drawPage
         loraStatusTv?.text = dpg?.loraSummary() ?: getString(R.string.s_117)
@@ -385,7 +385,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 选下载源：官方 / hf-mirror 镜像 */
+    /** Pick download source: official / hf-mirror mirror */
     fun pickLoraSource() {
         AlertDialog.Builder(activity)
             .setTitle(getString(R.string.s_041))
@@ -396,7 +396,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
             .show()
     }
 
-    /** Fuente para el TAESD: directa o mirror. */
+    /** TAESD source: direct or mirror */
     fun pickTaesdSource() {
         AlertDialog.Builder(activity)
             .setTitle(getString(R.string.s_548))
@@ -476,7 +476,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 删除单个 LoRA：target 为空时删当前选中的那个（不再一次清空全部）。 */
+    /** Delete single LoRA: if target is empty, delete the currently selected one (no double-clear) */
     fun confirmDeleteLora(target: File? = null) {
         val dpg = drawPage ?: return
         val f = target ?: dpg.activeLora()
@@ -496,7 +496,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
             .show()
     }
 
-    /** 长按删除一个模型集（连同它的全部文件）。 */
+    /** Long press to delete a model set (including all its files) */
     fun confirmDeleteDrawSet(s: ModelSet) {
         val dpg = drawPage ?: return
         if (dpg.isReady() && dpg.activeSetId() == s.id) {
@@ -530,7 +530,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         modelInfoText.text = getString(R.string.v_013, (f.name), (UiHelpers.fmtSize(f.length())))
         setStatus(getString(R.string.s_096), C_WARN)
         refreshSavedModels()
-        // 参数是按模型分别保存的，切换模型时把该模型那套回填到输入框
+        // Parameters are saved per model; switching models re-fills that model's settings into input fields
         loadChatParamsIntoUi()
     }
 
@@ -556,7 +556,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
             .show()
     }
 
-    /** 刷新模型页的打标（Tagger）状态：状态行 + 可选列表（模型 / 标签表） */
+    /** Refresh tagger UI (status row + optional list of models / label files) */
     fun refreshTaggerUi() {
         val dpg = drawPage
         taggerStatusTv?.text = dpg?.taggerSummary() ?: getString(R.string.s_245)
@@ -593,7 +593,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 按当前是否已加载切换按钮文案与配色（与「对话/绘图」一致：未加载=蓝底，已加载=浅底） */
+    /** Toggle button text and color (chat/drawing consistent: unloaded = dark background, loaded = light background) */
     fun refreshTaggerToggle() {
         val b = taggerLoadBtn ?: return
         if (drawPage?.taggerLoaded() == true) {
@@ -608,10 +608,10 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         }
     }
 
-    /** 加载 / 卸载打标模型（多个打标模型之间切换用） */
+    /** Load/unload tagger model (switch between multiple tagger models) */
     fun onTaggerToggleClick() = taggerUi.onTaggerToggleClick()
 
-    /** 列表小标题 */
+    /** List subtitle */
     fun listHeader(t: String) = TextView(activity).apply {
         text = t
         textSize = 12f
@@ -619,7 +619,7 @@ class DrawModelsController(private val host: DrawModelsHost) : ThemeAliases {
         setPadding(0, dp(6), 0, 0)
     }
 
-    /** 可点选的条目（高亮当前选中）；onLongClick 可选（如长按删除这一项） */
+    /** Selectable item (highlighted when selected); optional onLongClick (e.g. to delete this item) */
     fun selectableChip(
         f: File,
         selected: Boolean,

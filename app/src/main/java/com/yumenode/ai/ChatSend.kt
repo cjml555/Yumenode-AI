@@ -122,14 +122,14 @@ import com.yumenode.ai.tagRolesGguf
         var lastRender = 0L
 
         fun renderAnswer() {
-            // 第一轮可能先藏着不显示（等确认要不要调工具），见 hideStream
+            // The first round may be hidden initially (waiting to confirm whether a tool is called); see hideStream
             if (hideStream) return
             val now = SystemClock.uptimeMillis()
             if (now - lastRender < 120) return
             lastRender = now
             val md = displayPrefix + answerBuf
             if (md.isNotEmpty()) {
-                // 流式重渲染可能把焦点从输入框抢走：用户正在打字时把焦点还回去
+                // Streaming re-render may steal focus from the input box; give it back while the user is typing
                 val hadFocus = inputEdit.hasFocus()
                 markwonStream.setMarkdown(ai.answer, md)
                 if (hadFocus && !inputEdit.hasFocus()) inputEdit.requestFocus()
@@ -146,8 +146,8 @@ import com.yumenode.ai.tagRolesGguf
             if (hadFocus && !inputEdit.hasFocus()) inputEdit.requestFocus()
         }
 
-        // 「工具返回」轮：模板/引擎可能不认 system、tool 角色（会直接抛错），
-        // 那就换个候选角色重发一次；一但试出能用的就记住，后面不再试错。
+        // "Tool return" round: the template/engine may not understand system or tool roles (it throws),
+        // so retry with a different candidate role; once a usable one is found it's remembered and no more trial-and-error.
         var attempt = if (toolReturn == null) 0 else tagReturnIdx.coerceIn(0, 2)
         var genStart = 0L
         lastTpsFoot = null
@@ -166,17 +166,17 @@ import com.yumenode.ai.tagRolesGguf
                             net.ladenthin.llama.value.Pair(tagRolesGguf[attempt], toolReturn.text),
                         )
                     }
-                    // generateChat 会套用模型自带的对话模板；cache_prompt=true + 固定 slot
-                    // 让 llama.cpp 复用上一轮已算好的 KV 前缀，长对话不再重复 prefill。
-                    // 本回合带图且模型能看图 → 走多模态消息（ContentPart）；否则沿用纯文字路径
+                    // generateChat applies the model's own chat template; cache_prompt=true + a fixed slot
+                    // make llama.cpp reuse the KV prefix computed last round, so long conversations stop re-prefilling.
+                    // If this round has images and the model can see them → multimodal messages (ContentPart); otherwise the plain-text path
                     val params = if (visionOk && jpegs.isNotEmpty()) {
                         inferenceParamsBuilder.buildMultimodalParams(current, jpegs, extra)
                     } else {
                         inferenceParamsBuilder.buildInferenceParams(current, extra)
                     }
 
-                    // GGUF 模型的思考内容混在正文流里（<|channel>thought…<channel|> 或 …），
-                    // 用状态机把两路分开：思考进折叠区，正文走 Markdown 渲染。
+                    // GGUF models mix thinking content into the text stream (as <|channel>thought…<channel|> or …),
+                    // a state machine separates the two streams: thinking goes to the collapsible section, body to Markdown rendering.
                     fun onThoughtDelta(d: String) {
                         if (d.isEmpty()) return
                         thoughtBuf.append(d)
@@ -192,8 +192,8 @@ import com.yumenode.ai.tagRolesGguf
                         renderAnswer()
                     }
 
-                    // 开了思考模式就默认从思考区开始：Gemma 这类模型的 `<|channel>thought`
-                    // 前缀是写在 prompt 模板里的，不会出现在输出流中，只能靠结束标记分界。
+                    // With thinking mode on, start in the thinking section: models like Gemma have `<|channel>thought>`
+                    // baked into the prompt template, so it never appears in the output stream — the boundary can only be detected via the end marker.
                     val splitter = ReasoningSplitter(
                         ::onThoughtDelta,
                         ::onAnswerDelta,
@@ -206,8 +206,8 @@ import com.yumenode.ai.tagRolesGguf
                             val it = iterable.iterator()
                             ggufIterator = it
                             try {
-                                // 用户中断后 native 迭代器会抛异常（如 task not found），
-                                // 此时正常收尾，不当成错误
+                                // After a user interrupt the native iterator throws (e.g. "task not found"),
+                                // so we wind down normally instead of treating it as an error
                                 val next = {
                                     try {
                                         if (it.hasNext()) it.next() else null
@@ -237,11 +237,11 @@ import com.yumenode.ai.tagRolesGguf
                     // Reasoning text arrives on channels["thought"], answer text in contents.
                     val items = ArrayList<Content>()
                     if (overText.isNotEmpty()) items.add(Content.Text(overText))
-                    // 模型自己看不见图时不要把图片塞给它（图片只交给打标模型用）
+                    // Don't feed images to a model that can't see them (images only go to the tagger)
                     if (visionOk) jpegs.forEach { items.add(Content.ImageBytes(it)) }
-                    // LiteRT 的会话是【增量累积】的：历史 + 本轮一旦超过模型上下文（4096），
-                    // native 直接抛 "Input token ids too long"，这一轮就废了。
-                    // 所以发送前自己估一把：超预算就重建会话——configFor 会按预算裁掉最老的对话。
+                    // LiteRT sessions are incrementally accumulated: once history + this round exceed the model context (4096),
+                    // native throws "Input token ids too long" and this round is dead.
+                    // So estimate before sending: over budget → rebuild the session, and configFor trims the oldest turns to fit.
                     if (chatParams.dirty ||
                         chatManager.estimateConversationTokens(
                             current, overText, dropLast = dropLastForBudget, 
@@ -266,8 +266,8 @@ import com.yumenode.ai.tagRolesGguf
                             }
                             conv.sendMessageAsync(ask, thinkingConfig = tc)
                         }
-                        // 工具结果优先按「工具返回」回传（LiteRT-LM 原生帧），
-                        // 模板不认再退回 system 消息，最后才退回普通文本消息。
+                        // Tool results are returned preferentially as "tool return" (LiteRT-LM native frames),
+                        // falling back to a system message if the template rejects it, and finally to a plain text message.
                         attempt == 0 -> conv.sendMessageAsync(
                             Message.tool(Contents.of(Content.ToolResponse("tagger", toolReturn.text))),
                             thinkingConfig = tc,
@@ -310,18 +310,18 @@ import com.yumenode.ai.tagRolesGguf
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                // 只在「一个字都还没吐出来」时换角色重试，避免把半截输出丢了
+                // Retry with a different role only when nothing has been emitted yet, to avoid losing partial output
                 val retry = toolReturn != null && !stopRequested && attempt < 2 &&
                     answerBuf.isEmpty() && thoughtBuf.isEmpty() && !isContextOverflow(e)
                 if (!retry) throw e
                 attempt++
                 tagReturnIdx = attempt
-                // 这一条消息可能已经被引擎吃进会话，重建一次把这轮的脏状态丢掉
+                // That message may already be in the engine's session; rebuild once to discard this round's dirty state
                 if (!gguf) runCatching { rebuildConversation(silent = true) }
             }
         }
 
-        // 本轮收尾：用完整渲染器渲染一次（含表格），并把本轮内容并进这一轮的回答
+        // Round wrap-up: render once with the full renderer (including tables) and fold this round's content into the turn's answer
         val ans = answerBuf.toString()
         val th = thoughtBuf.toString()
         val full = displayPrefix + ans
@@ -361,23 +361,23 @@ import com.yumenode.ai.tagRolesGguf
         val text = inputEdit.text.toString().trim()
         val attachBmps = attachmentHandler.getPendingImages().map { it.bmp }
         val attachJpegs = attachmentHandler.getPendingImages().map { it.jpeg }
-        // 用户这一轮带的文件：附件条里有就正常发（「重新生成」也会先把上一轮的文件还原回附件条）
+        // Files attached this round: send normally if present in the attachment bar ("regenerate" also restores the previous round's files back into the bar first)
         if (text.isEmpty() && attachJpegs.isEmpty() && attachmentHandler.getPendingFiles().isEmpty()) return
-        // 文件是「文字」，任何模型都能读，不受多模态限制
+        // Files are "text" — any model can read them, unaffected by multimodal limits
         val fileBlock = chatManager.buildFileBlock(attachmentHandler.getPendingFiles())
         val fileNames = attachmentHandler.getPendingFiles().map { it.name }
         var sendText = ChatSendLogic.composeSendText(text, fileBlock)
-        // 生成过程中不允许发起新的一轮（选图/引用可以在生成中进行，发送不行）
+        // A new round cannot be started while generating (picking images or quoting is fine during generation, sending is not)
         if (busy) { toast(getString(R.string.s_133)); return }
 
-        // 带图发送：模型要么自己能看图（.litertlm 多模态 / 挂了 mmproj 的 gguf），
-        // 要么能借打标模型看图（看不见图时用 <tag> 命令让打标模型识别）
+        // Sending images: the model must either see them itself (.litertlm multimodal / gguf with mmproj),
+        // or borrow the tagger's sight (when blind, use <tag> to have the tagger recognize them)
         if (attachJpegs.isNotEmpty()) {
             if (engine == null && llamaModel == null) { toast(getString(R.string.s_273)); return }
             if (!visionOk && !canTagFromChat) { toast(getString(R.string.s_272)); return }
         }
 
-        // 绘图模式：把输入当作正面提示词，按绘图页的参数（除正面提示词外）生成
+        // Draw mode: treat input as a positive prompt and generate using the draw page's params (except the positive prompt itself)
         val dpg = drawPage
         if (drawMode && dpg != null) {
             doDrawFromChat(text, dpg)
@@ -393,13 +393,13 @@ import com.yumenode.ai.tagRolesGguf
         var conv: Conversation? = null
         if (!isGgufRun) {
             val needThinkingRebuild = convThinking != thinkCheck.isChecked
-            // 绘图能力开关变了（加载/卸载绘图模型）也要重建：
-            // system 里的 <draw> 提示只在建会话时写入，不重建则模型不知道能画图
+            // A change in draw capability (loading/unloading the draw model) also requires a rebuild:
+            // the <draw> hint in the system prompt is written only at session creation; without a rebuild the model won't know it can draw
             val needCapRebuild = convDrawCapable != canDrawFromChat
             if (convNeedsRebuild || needThinkingRebuild || needCapRebuild) {
-                // 上一轮被中断：cancelProcess() 之后会话可能已不可用，静默用历史重建
+                // The previous round was interrupted: after cancelProcess() the session may be unusable, so silently rebuild from history
                 convNeedsRebuild = false
-                // 只有「思考开关变化」需要给用户可见提示，中断恢复/能力变化都静默重建
+                // Only a thinking-toggle change needs a visible hint to the user; interrupt recovery and capability changes rebuild silently
                 rebuildConversation(silent = !needThinkingRebuild)
             }
             conv = conversation ?: run { toast(getString(R.string.s_042)); return }
@@ -407,12 +407,12 @@ import com.yumenode.ai.tagRolesGguf
 
         val turn = QaTurn(text)
         current.turns += turn
-        // 模型看不见图：把可用的打标命令说明附在本轮消息末尾（不进历史）
-        // 注意：必须等 turn.userImage 写好后才能判断，否则提示根本不会被加上
+        // The model can't see images: append the available tagging-command instructions at the end of this round's message (not part of history)
+        // Note: this check must wait until turn.userImage is written, or the hint never gets added
         if (fileNames.isNotEmpty()) {
             turn.userFile = fileNames.joinToString("|")
             turn.fileText = fileBlock
-            // 把文件原始内容存进这一轮，方便「重新生成」把附件还原回附件条
+            // Store the files' raw content in this turn, so "regenerate" can restore the attachments back into the bar
             turn.fileStore = chatManager.encodeFiles(attachmentHandler.getPendingFiles())
         }
         if (current.title == getString(R.string.s_109)) {
@@ -433,8 +433,8 @@ import com.yumenode.ai.tagRolesGguf
             if (names.isNotEmpty()) turn.userImage = names.joinToString("|")
             attachmentHandler.clearPendingImages()
         }
-        // 模型看不见图：本轮带图时先告诉它「这条消息带了图片」，再给打标工具说明，
-        // 否则它会直接反问「请提供图片」（这段只用于本轮，不进历史）
+        // The model can't see images: when this round has images, first tell it "this message has images", then give the tagging-tool instructions,
+        // otherwise it will just ask "please provide the image" (this segment is round-local, not part of history)
         if (canTagTurn(turn)) sendText += "\n\n" + tagHint(turn)
         attachmentHandler.clearPendingFiles()
 
@@ -446,24 +446,24 @@ import com.yumenode.ai.tagRolesGguf
         setStatus(getString(R.string.s_143), C_WARN)
 
         val ai = addAiArea { regenerate(turn) }
-        ai.regenButton.visibility = View.GONE   // 生成结束后再显示，避免与「停止」混淆
+        ai.regenButton.visibility = View.GONE   // Show only after generation finishes, to avoid confusion with "stop"
         var cancelled = false
         stopRequested = false
 
         genJob = scope.launch {
             var drawReq: String? = null
-            var shown = ""          // 气泡里当前的正文（前几轮 + 本轮输出）
-            var thoughtShown = ""   // 已经落在思考区里的内容
+            var shown = ""          // Current body in the bubble (previous rounds + this round's output)
+            var thoughtShown = ""   // Content already in the thinking section
             try {
-                // ===== agent 循环：生成 → 模型要调工具就执行 → 把结果补回上下文再生成 =====
-                var overText = sendText   // 本轮要发的文本（第一轮＝输入＋文件正文＋工具说明）
-                // 打标结果按「工具返回」回传（system / tool 角色，不冒充用户消息）
+                // Agent loop: generate → run the model's requested tools → feed results back into context and generate again
+                var overText = sendText   // Text for this round (round 1 = input + file bodies + tool instructions)
+                // Send tagger results back as a tool return (system / tool role, never posing as a user message)
                 var toolReturn: ToolReturn? = null
                 var round = 0
                 var autoTagged = false
-                var tagRan = false      // 这一轮真的跑过打标（用于兜底纠偏）
+                var tagRan = false      // Whether tagging actually ran this round (used for the fallback correction)
                 var nudgeUsed = false
-                // 带图、模型又看不见图：第一轮先显示一句占位（这一轮的内容不显示，免得命令命中后整段消失重来）
+                // Images present but model is blind: show a placeholder on the first round (this round's content stays hidden so it doesn't vanish and redraw when the command hits)
                 if (canTagTurn(turn)) markwonStream.setMarkdown(ai.answer, getString(R.string.s_323))
                 while (true) {
                     val out = runRound(
@@ -476,13 +476,13 @@ import com.yumenode.ai.tagRolesGguf
                         thoughtPrefix = thoughtShown,
                         toolReturn = toolReturn,
                         dropLastForBudget = round == 0,
-                        // 带图、模型又看不见图时，第一轮先不显示：它可能先啰嗦一段再吐 <tag>，
-                        // 直接显示的话命令命中后这段会消失重来
+                        // Blind model with images: hide the first round — it may babble a bit before emitting <tag>,
+                        // and showing it would make that segment vanish and redraw once the command hits
                         hideStream = round == 0 && canTagTurn(turn),
                     )
                     var roundText = out.answer
 
-                    // ① 出图命令优先：交给绘图模型（真正出图放在 finally，必须等 busy 复位）
+                    // ① Draw command takes priority: hand it to the draw model (actual drawing goes in finally, must wait for busy to clear)
                     val drawHit = scanDrawCommand(roundText, out.thought)
                     if (drawHit != null) {
                         if (drawHit.inAnswer) {
@@ -500,17 +500,17 @@ import com.yumenode.ai.tagRolesGguf
                         break
                     }
 
-                    // ② 打标命令：模型自己看不见图时，让它借打标模型看图，拿到标签再回答
+                    // ② Tag command: when the model is blind, have it borrow the tagger to see the image, then answer with the labels
                     val tagHit = if (round < MAX_TAG_ROUNDS) scanTagCommand(roundText, out.thought) else null
-                    // 兜底：小模型经常无视图片工具、直接反问「请提供图片」。这一轮带图、它又像在推辞时，
-                    // App 替它调用一次打标模型（阈值/标签数用默认 0.35 / 40），结果照样按「工具返回」发回去。
+                    // Fallback: small models often ignore the image tool and just ask "please provide the image". When this round has images and it looks like a refusal,
+                    // the app calls the tagger for it (threshold/count use defaults 0.35 / 40) and returns the result as a "tool return" anyway.
                     val autoTagRes: String? = if (tagHit == null && round == 0 && !autoTagged && canTagFromChat &&
                         attachJpegs.isNotEmpty() && commandScanner.looksLikeBlindRefusal(roundText)
                     ) {
                         autoTagged = true
                         val autoNames = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
                         val r = if (autoNames.isEmpty()) "" else {
-                            // 打标结果不展示：先把这一轮的推辞内容清掉
+                            // Don't display the tagging result: first clear this round's refusal text
                             shown = ""
                             turn.answer = ""
                             markwonFull.setMarkdown(ai.answer, "")
@@ -522,7 +522,7 @@ import com.yumenode.ai.tagRolesGguf
                     } else null
                     if (tagHit == null && autoTagRes == null) {
                         val clean = commandScanner.stripTagCommand(roundText)
-                        // 模型把工具结果当成新的输入、反过来问用户「请提出您的问题」：明确提示后重来一轮（只一次）
+                        // The model treated the tool result as new input and asked the user "please ask your question": nudge it explicitly and retry once (only once)
                         if (tagRan && !nudgeUsed && commandScanner.looksLikeQuestionAsk(clean)) {
                             nudgeUsed = true
                             shown = ""
@@ -533,17 +533,17 @@ import com.yumenode.ai.tagRolesGguf
                             round++
                             continue
                         }
-                        // 没有可用的工具调用：把可能残留的 <tag> 命令抹掉（模型有读图能力、打标路径已关闭时）
+                        // No usable tool call: strip any leftover <tag> command (when the model can see images and the tagging path is closed)
                         shown += clean
                         thoughtShown += out.thought
                         break
                     }
                     if (tagHit == null) {
-                        // 兜底路径：模型没调用工具，但打标结果已经有了，直接当工具返回发回去（不展示标签）
+                        // Fallback path: the model didn't call the tool, but the tagging result is already available — send it back as a tool return directly (labels not shown)
                         thoughtShown += out.thought
                         val autoBlock = getString(R.string.s_328, autoTagRes, turn.user.take(200))
                         overText = autoBlock
-                        // gguf：用「模型只输出了 <tag> 命令」的干净形态回填，别把上一轮的推辞带进上下文
+                        // gguf: refill with the clean form "model only output a <tag> command", don't carry the previous round's refusal into context
                         val autoCmd = "<tag threshold=\"0.35\" topk=\"40\"></tag>"
                         toolReturn = ToolReturn(if (isGgufRun) autoCmd else out.answer, autoBlock)
                         tagRan = true
@@ -551,7 +551,7 @@ import com.yumenode.ai.tagRolesGguf
                         chatScrollManager?.scrollToBottom()
                         continue
                     }
-                    // 把命令换成一行说明：正文里的换在正文，思考里的换在思考区、正文补一行
+                    // Replace the command with a one-line note: if it was in the body it stays in the body; if it was in the thought it goes to the thought section and the body gets a line
                     val _tagHit = tagHit!! // safe: already null-checked above at line 4930
                     fun swapLine(replacement: String): String = if (_tagHit.inAnswer) {
                         thoughtShown += out.thought
@@ -564,7 +564,7 @@ import com.yumenode.ai.tagRolesGguf
                     }
 
                     val names = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-                    // 打标结果不展示：先把气泡里这一轮的调用过程清掉，识别完由模型直接给最终回答
+                    // Don't display the tagging result: first clear this round's call trace from the bubble; the model gives the final answer directly after recognition
                     shown = ""
                     turn.answer = ""
                     markwonFull.setMarkdown(ai.answer, "")
@@ -578,7 +578,7 @@ import com.yumenode.ai.tagRolesGguf
                         }
                     }
                     if (res.startsWith("\u0000")) {
-                        // 这轮没有图片、或打标失败：把命令换成原因，本轮就此结束
+                        // No images this round, or tagging failed: replace the command with the reason and end this round
                         shown += swapLine(getString(R.string.s_325, res.removePrefix("\u0000")))
                         break
                     }
@@ -586,13 +586,13 @@ import com.yumenode.ai.tagRolesGguf
                         shown += swapLine(getString(R.string.s_327))
                         break
                     }
-                    // 成功：不展示标签，气泡留空，等模型基于标签给出最终回答
+                    // Success: don't show the labels; leave the bubble empty and wait for the model to give a final answer based on them
                     thoughtShown += if (tagHit.inAnswer) out.thought else {
                         out.thought.replaceRange(_tagHit.start, _tagHit.end, getString(R.string.s_323))
                     }
                     val block = getString(R.string.s_328, res, turn.user.take(200))
                     overText = block
-                    // gguf：用「模型只输出了 <tag> 命令」的干净形态回填，别把它上一轮的碎碎念带进上下文
+                    // gguf: refill with the clean form "model only output a <tag> command", don't carry the previous round's rambling into context
                     val cmdEcho = "<tag threshold=\"${tagHit.req.threshold}\" topk=\"${tagHit.req.topK}\"></tag>"
                     toolReturn = ToolReturn(if (isGgufRun) cmdEcho else out.answer, block)
                     tagRan = true
@@ -603,7 +603,7 @@ import com.yumenode.ai.tagRolesGguf
                 if (turn.answer.isNotEmpty()) {
                     markwonFull.setMarkdown(ai.answer, turn.answer + (lastTpsFoot ?: ""))
                 } else if (turn.thought.isEmpty()) {
-                    // 第一轮被隐藏、模型又什么都没说：给个提示，别留一个空气泡
+                    // The first round was hidden and the model said nothing: give a hint rather than leaving an empty bubble
                     ai.answer.text = getString(R.string.s_007)
                     ai.answer.setTextColor(C_SUBTEXT)
                 }
@@ -614,11 +614,11 @@ import com.yumenode.ai.tagRolesGguf
                 throw e
             } catch (e: Throwable) {
                 if (stopRequested) {
-                    // 主动中断：native 被打断后常抛异常（task not found 等），
-                    // 按「已中断」处理，保留已经输出到界面上的内容
+                    // Intentional interrupt: after the native side is interrupted it often throws (e.g. "task not found"),
+                    // so treat it as "interrupted" and keep whatever is already on screen
                     cancelled = true
                 } else if (isContextOverflow(e)) {
-                    // 上下文塞不下：给能操作的提示，别甩一串 Status Code 给用户
+                    // Context overflow: give an actionable hint instead of dumping a status code at the user
                     ai.answer.text = getString(R.string.s_302)
                     ai.answer.setTextColor(C_ERR)
                     setStatus(getString(R.string.s_145), C_ERR)
@@ -643,7 +643,7 @@ import com.yumenode.ai.tagRolesGguf
                     }
                     setStatus(getString(R.string.s_082), C_IDLE)
                 } else if (drawReq != null) {
-                    // 交给绘图模型出图（必须等 busy 复位后再启动，否则会被当成「正在生成中」拦住）
+                    // Hand off to the draw model for image generation (must start after busy clears, or it gets blocked as "generating")
                     val dpg = drawPage
                     if (dpg != null) doDrawFromChat(drawReq, dpg)
                 }

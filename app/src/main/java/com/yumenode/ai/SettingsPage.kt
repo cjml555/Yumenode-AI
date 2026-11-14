@@ -41,7 +41,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         }
         val card = host.ui.card()
 
-        // ---- 设置（可折叠，默认展开；展开状态记在偏好里，重启后保持）----
+        // ---- Settings (collapsible, expanded by default; state saved in prefs, survives restart) ----
         val settingsBody = collapsibleSection(
             card, getString(R.string.s_381), expanded = true, prefKey = KEY_UI_SETTINGS_OPEN)
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_376)))
@@ -52,7 +52,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 getString(R.string.s_379), getString(R.string.s_498)
             ),
             host.palette,
-            // 档位：0=Claro 1=Sistema 2=Oscuro 3=OLED; themeMode: 0=Sistema 1=Claro 2=Oscuro 3=OLED
+            // Position: 0=Claro 1=Sistema 2=Oscuro 3=OLED; themeMode: 0=Sistema 1=Claro 2=Oscuro 3=OLED
             when (host.themeMode) {
                 1 -> 0
                 2 -> 2
@@ -69,7 +69,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             }
             if (mode != host.themeMode) {
                 if (host.drawBusy) {
-                    // 出图途中重建视图会把结果丢掉，先拒绝并弹回原位
+                    // Rebuilding the view mid-generation would drop the result; refuse and snap back
                     host.toast(getString(R.string.s_382))
                     themeSwitch.setIndexSilently(
                         when (host.themeMode) {
@@ -116,12 +116,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
 
 
 
-        // ---- 推理线程数（全局：绘图 / 对话 gguf / 打标 共用；下次加载模型生效）----
-        // 放在「设置」分区而不是绘图页：它管的是所有 CPU 推理，不是绘图专属。
+        // ---- Inference thread count (global: shared by draw / chat gguf / tagger; takes effect on next model load) ----
+        // Placed in "Settings" rather than the draw page: it governs all CPU inference, not draw-specific.
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_439)), matchWrap().apply { topMargin = dp(14) })
         val maxThreads = InferConfig.maxThreads()
-        // 直接输入而不是下拉选择（用户 2026-10-13 指定）。越界当场纠正：
-        //   0（或负数）→ 1；超过本机可用核数 → 上限。
+        // Direct input instead of a dropdown (user request 2026-10-13). Out-of-range is corrected on the spot:
+        //   0 (or negative) → 1; over available cores → capped.
         var fixing = false
         val threadsEdit = EditText(ctx).apply {
             setText(InferConfig.threads(ctx).toString())
@@ -133,7 +133,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             isSingleLine = true
         }
         fun applyThreads(raw: String) {
-            // 空串按默认值处理（用户清空后直接离开输入框）
+            // Empty string is treated as default (user cleared and moved on); deferred to focus-loss fallback, not stuffed back immediately
             val v = raw.trim().toIntOrNull() ?: InferConfig.DEFAULT
             val fixed = when {
                 v <= 0 -> 1
@@ -151,7 +151,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         threadsEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
                 if (fixing) return
-                // 中途清空是正常输入过程（准备重打），留到失焦时兜底，别当场塞个值回去
+                // Mid-edit clearing is normal input (about to retype); let focus-loss handle it, don't push a value back now
                 if (s == null || s.toString().trim().isEmpty()) return
                 applyThreads(s.toString())
             }
@@ -161,8 +161,8 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         threadsEdit.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) applyThreads(threadsEdit.text.toString())
         }
-        // 一行显示成「[输入] / 上限」：输入框后跟一个静态的「/ 8」，
-        // 用户一眼能看出合法范围，不用去猜最大值是多少（用户 2026-10-13 指定）。
+        // One row shows "[input] / max": a static "/ 8" after the input box,
+        // so the user sees the legal range at a glance instead of guessing the max (user request 2026-10-13).
         val threadsRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -177,8 +177,8 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             setTextColor(C_SUBTEXT)
         }, wrapWrap().apply { leftMargin = dp(6) })
         settingsBody.addView(threadsRow, matchWrap().apply { topMargin = dp(8) })
-        // 唯一一条保留的说明：.litertlm 走 Google LiteRT-LM，该库没有线程数参数，
-        // 不受这项控制。不写清的话，用户会以为是 bug（这条 2026-10-13 由用户要求加回）。
+        // The one note kept: .litertlm uses Google LiteRT-LM, which has no thread-count parameter,
+        // so it isn't governed by this. Without this note users would think it's a bug (added back per user request 2026-10-13).
         settingsBody.addView(host.ui.hintText(getString(R.string.s_446)), matchWrap().apply { topMargin = dp(4) })
 
         settingsBody.addView(
@@ -371,7 +371,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         settingsBody.addView(shareBtn, matchWrap().apply { topMargin = dp(6) })
         settingsBody.addView(host.ui.hintText(getString(R.string.s_479)), matchWrap().apply { topMargin = dp(4) })
 
-        // ---- 关于（可折叠，默认展开；展开状态同样记在偏好里）----
+        // ---- About (collapsible, expanded by default; state also saved in prefs) ----
         val aboutBody = collapsibleSection(
             card, getString(R.string.s_048), expanded = true, prefKey = KEY_UI_ABOUT_OPEN)
         aboutBody.addView(host.ui.hintText(getString(R.string.s_142, host.appVersion())))
@@ -399,9 +399,9 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_194)), matchWrap().apply { topMargin = dp(14) })
         aboutBody.addView(linkText(getString(R.string.s_107), "https://github.com/cjml555/Yumenode-AI"))
 
-        // ---- 声明（「关于」最底：AI 产出免责 + 开源版权 + 指向 README / NOTICE）----
-        // 单独成段而不是并进上面的「许可」：许可是"我用了谁的"，声明是"产出归谁负责"，
-        // 两件事性质不同（前者是义务披露，后者是责任边界）。
+        // ---- Disclaimer (bottom of "About": AI-output liability waiver + open-source credits + links to README / NOTICE) ----
+        // Separate paragraph, not merged into the "License" above: license is "whose did I use", disclaimer is "who owns the output" —
+        // different in nature (former is a disclosure obligation, latter is a liability boundary).
         aboutBody.addView(host.ui.divider(), matchWrap().apply { topMargin = dp(14) })
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_448)), matchWrap().apply { topMargin = dp(12) })
         aboutBody.addView(host.ui.hintText(getString(R.string.s_449)))
@@ -775,17 +775,17 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         head.addView(arrow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        // 关键：View 在加入父容器之前 layoutParams 是 null，而下面 render(false) 会立刻用它
-        // （settle）—— 必须先给一份，否则 buildUi 阶段直接 NPE，表现就是「打开立刻闪退」。
+        // Key point: View.layoutParams is null before the view is added to its parent, and render(false) below
+                // uses it immediately (settle) — must give it one first, or buildUi NPEs right away, i.e. "crashes on open".
         val body = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = matchWrap()
         }
-        // 展开状态从偏好里读；没存过才用 expanded 的默认值
+        // Expand state read from prefs; only fall back to the `expanded` default if nothing was saved
         var open = prefKey?.let { host.prefBool(it, expanded) } ?: expanded
         var anim: ValueAnimator? = null
 
-        /** 收尾：取消动画并把高度还原成 WRAP_CONTENT（否则动画值会被钉死） */
+        /** Cleanup: cancel animation and restore height to WRAP_CONTENT (otherwise animated values get stuck) */
         fun settle() {
             anim?.cancel()
             anim = null
@@ -794,7 +794,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             }
         }
 
-        /** 展开 / 收起。animate=false 用于初始状态（直接摆好，不播动画） */
+        /** Expand / collapse. animate=false is for the initial state (place directly, no animation) */
         fun render(animate: Boolean) {
             arrow.text = if (open) "\u25be" else "\u25b8"
             if (!animate) {
@@ -803,7 +803,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 return
             }
             val target = if (open) {
-                // 先按父容器宽度量一遍，拿到内容的真实高度（收起时高度是 0，量不出来）
+                // Measure against the parent's width first to get the content's real height (collapsed height is 0, can't measure it)
                 val w = (parentBox.width - parentBox.paddingLeft - parentBox.paddingRight)
                     .takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
                 body.measure(
@@ -841,7 +841,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         render(animate = false)
         head.setOnClickListener {
             open = !open
-            // 落盘：不然合上之后切走/重启又会弹回来
+            // Persist: otherwise collapsing then switching away / restarting would pop it back open
             prefKey?.let { host.prefPutBool(it, open) }
             render(animate = true)
         }

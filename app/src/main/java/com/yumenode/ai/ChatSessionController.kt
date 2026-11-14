@@ -84,12 +84,12 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
     private fun showImageMenu(bmp: Bitmap, name: String) = host.showChatImageMenuFor(bmp, name)
     private fun attachImageBubble(ai: AiArea, bmp: Bitmap, name: String) = host.attachChatBubble(ai, bmp, name)
 
-    /** 从一条 LiteRT 消息里取出文本（delega en ChatCore, sin duplicar). */
+    /** Pull text out of a LiteRT message (delegates to ChatCore, no duplication). */
     fun extractText(m: Message): String = ChatCore.messageText(m)
 
     /**
-     * LiteRT 的流式片段语义在版本间不完全一致（增量/累积）；兼容逻辑在 ChatCore。
-     * （注释与 MainActivity 原版一致。）
+     * LiteRT's streaming fragment semantics differ across versions (incremental vs. cumulative); compatibility logic lives in ChatCore.
+     * (Comment matches the original MainActivity version.)
      */
     fun mergeStreamDelta(cur: String, delta: String): String = ChatCore.mergeStream(cur, delta)
 
@@ -209,7 +209,7 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         val idx = current.turns.indexOf(turn)
         if (idx < 0) return
         val text = turn.user
-        // 忠实重发：这一轮带的图片与文件要一起还原，否则「重新生成」会退化成纯文字提问
+        // Faithful resend: restore the images and files this round carried, otherwise "regenerate" degenerates to a text-only question
         val imgNames = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
         val imgPairs = imgNames.mapNotNull { n ->
             readChatImage(n)?.let { bmp -> bmp to bitmapToJpeg(bmp) }
@@ -222,7 +222,7 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         attachmentHandler.clearPendingImages()
         attachmentHandler.clearPendingFiles()
         for (p in imgPairs) attachmentHandler.addPendingImage(p.first, p.second)
-        // 文件：把上一轮的原始内容还原到附件条（走和正常发送完全一样的路径）
+        // Files: restore the previous round's raw content into the attachment bar (same path as a normal send)
         val restored = attachmentHandler.restoreFiles(turn.fileStore)
         if (restored > 0) toast(getString(R.string.s_320, (restored)))
         else if (fNames.isNotEmpty()) toast(getString(R.string.s_321))
@@ -297,12 +297,12 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
             setTextColor(C_TEXT)
             setLineSpacing(dp(3).toFloat(), 1f)
             setTextIsSelectable(true)
-            // 不给 isFocusable = false：那会把 setTextIsSelectable 设的焦点属性覆盖掉，
-            // 导致长按无法选中复制。防键盘焦点抢夺由 renderAnswer/renderThought 里的焦点守卫负责。
+            // Do not set isFocusable = false: that would override the focus attributes set by setTextIsSelectable,
+            // breaking long-press select/copy. Keyboard-focus stealing is handled by the focus guards in renderAnswer/renderThought.
         }
         wrap.addView(answer, matchWrap().apply { topMargin = dp(4) })
 
-        // 「重新生成」：对回答不满意时，丢掉这一轮（及其后）的回答重问一次
+        // "Regenerate": drop this round (and everything after it) and re-ask
         val regenButton = TextView(activity).apply {
             text = getString(R.string.s_031)
             textSize = 12.5f
@@ -331,7 +331,7 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
             }
             for (nm in files) {
                 strip.addView(TextView(activity).apply {
-                    // 注意要写 this.text：本函数的 text 参数会把 TextView.text 遮住
+                    // Must write this.text: the function's `text` parameter would shadow TextView.text
                     this.text = "📄 $nm"
                     textSize = 12f
                     setTextColor(C_TEXT)
@@ -408,7 +408,7 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         busy = b
         loadButton.isEnabled = !b
         loadButton.alpha = if (b) 0.5f else 1f
-        // 生成过程中不禁用输入框：可以照常打字（此时发送键是「停止」，只是不发送）
+        // Input box is not disabled during generation: keep typing (the send button then reads "stop", just not sending)
     }
 
     /** Set status with color (e.g., WARN, OK, IDLE, ERROR) */
@@ -494,7 +494,7 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         }
     }
 
-    /** 把图片写进应用私有目录，返回是否成功 */
+    /** Write an image into the app's private directory; returns whether it succeeded */
     private fun writeChatImage(bmp: Bitmap, name: String): Boolean = try {
         val dir = File(host.activity.filesDir, "chatimg").apply { mkdirs() }
         File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }

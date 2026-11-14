@@ -4,39 +4,39 @@ package com.yumenode.ai
 import android.content.Context
 
 /**
- * 推理线程数 —— **全局设置**，不只管绘图。
+ * Inference thread count -- **global**, not just for drawing.
  *
- * 原先这个值只存在绘图页（偏好键 `drawThreads`），于是「线程数」被当成了绘图独有的开关。
- * 实际上它是 CPU 推理的通用参数，三条路径都吃它：
- *   1. 绘图（stable-diffusion.cpp）—— `sd_ctx_params_t.n_threads`
- *   2. 对话 GGUF（llama.cpp）—— `ModelParameters.setThreads / setThreadsBatch`
- *   3. 打标（ONNX Runtime）—— `OrtSession.SessionOptions.setIntraOpNumThreads`
+ * Previously this value only lived on the draw page (pref key `drawThreads`), so "thread count" was treated as a draw-only toggle.
+ * In fact it is a generic CPU inference parameter, consumed by all three paths:
+ *   1. Drawing (stable-diffusion.cpp) -- `sd_ctx_params_t.n_threads`
+ *   2. Chat GGUF (llama.cpp) -- `ModelParameters.setThreads / setThreadsBatch`
+ *   3. Tagging (ONNX Runtime) -- `OrtSession.SessionOptions.setIntraOpNumThreads`
  *
- * ⚠ 例外：对话的 **`.litertlm`（Google LiteRT-LM）没有线程数参数**。
- * `EngineConfig` 的字段只有 modelPath / backend / visionBackend / audioBackend /
- * maxNumTokens / maxNumImages / cacheDir（v0.17.0 实测反编译确认），所以那一条路径
- * 不受这里控制 —— 是库的限制，不是漏接。
+ * ⚠ Exception: chat via **`.litertlm` (Google LiteRT-LM) has no thread-count parameter**.
+ * `EngineConfig` only exposes modelPath / backend / visionBackend / audioBackend /
+ * maxNumTokens / maxNumImages / cacheDir (confirmed by reverse-engineering v0.17.0), so that path
+ * is not controlled here -- it is a library limitation, not a missing integration.
  *
- * 改完**下次加载模型才生效**（三条路径都是在加载时把线程数交给 native）。
+ * Changes take effect **next time a model loads** (all three paths hand the thread count to native at load time).
  */
 object InferConfig {
 
     private const val PREFS = "ponko"
     private const val KEY_THREADS = "inferThreads"
 
-    /** 旧键：1.7.2 测试期误用绘图专属的名字，只读来兼容，不再写 */
+    /** Legacy key: misnamed for the draw page during the 1.7.2 test phase; read for compatibility, no longer written */
     private const val KEY_LEGACY_DRAW = "drawThreads"
 
-    /** 默认 4：多数手机的大核数。开太多会跑到小核上，反而更慢。 */
+    /** Default 4: the big-core count on most phones. Too many threads spill onto little cores and slow things down. */
     const val DEFAULT = 4
 
     /**
-     * 上限 = 设备**真实可用**核数，不做人为封顶（用户 2026-10-13 指定）。
+     * Upper bound = the device's **real usable** core count, no artificial cap (user directive 2026-10-13).
      *
-     * 注意 `availableProcessors()` 返回的是**当前可用**核数（会被 cpuset / 省电策略实时限制），
-     * 不一定等于物理核数 —— 但对"能开几个推理线程"这个问题来说，这恰好是想要的语义：
-     * 拿当前可用数当上限，才不会出现"界面允许 8、实际只有 4 核能用"的错配。
-     * 下限 1：任何情况下至少给一个线程。
+     * Note `availableProcessors()` returns the **currently usable** core count (real-time limited by cpuset / battery-saver),
+     * not necessarily the physical core count -- but for "how many inference threads can I run" that is exactly the desired semantics:
+     * capping at the current usable count avoids a UI that allows 8 while only 4 cores are actually available.
+     * Lower bound 1: at least one thread in all cases.
      */
     fun maxThreads(): Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
@@ -49,7 +49,7 @@ object InferConfig {
     fun recommendedThreads(c: Context): Int =
         DeviceProbe.recommendedThreads(DeviceProbe.read(c))
 
-    /** 当前线程数（带兼容读取旧键；越界值夹回合法区间） */
+    /** Current thread count (reads the legacy key for compatibility; out-of-range values clamped back) */
     fun threads(c: Context): Int {
         val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         // Sin valor guardado se usa el recomendado del SoC, no un 4 fijo.

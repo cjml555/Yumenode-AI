@@ -28,7 +28,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
- * ChatImageHandler — 集中处理图片读写、预览、全屏查看、保存 a la galería, 拍照。
+ * ChatImageHandler — centralizes image read/write, preview, fullscreen viewing, saving to the gallery, and photo taking.
  *
  * Extraído de MainActivity para limpiar el God Object.
  *

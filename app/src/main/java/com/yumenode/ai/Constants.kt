@@ -19,7 +19,7 @@ internal const val REQ_TAKE_PHOTO = 1006
 // REQ_PICK_CHAT_IMAGE and REQ_PICK_FILE now handled by AttachmentHandler
 internal const val REQ_PICK_MMPROJ = 1008
 internal const val REQ_PERM_STORAGE = 1009
-/** Android 13+ 常驻通知权限（对话 API 用） */
+/** Android 13+ persistent notification permission (used by the chat API) */
 internal const val REQ_NOTIF = 1020
 
 // ---- Preference keys (collapsible sections + chat think) ----

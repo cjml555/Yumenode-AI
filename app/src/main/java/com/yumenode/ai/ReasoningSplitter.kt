@@ -2,15 +2,15 @@
 package com.yumenode.ai
 
 /**
- * 把 GGUF 模型的流式输出拆成「思考内容」和「正文」两路。
+ * Splits the streaming output of a GGUF model into two streams: "thought" content and "body" content.
  *
- * 支持的思考标记：
- *  - Gemma 3n / 4：`<|channel>thought` … `<channel|>`
- *  - DeepSeek / Qwen / GLM：` thinking` … `<｜end▁of▁thinking｜>`
+ * Supported thought markers:
+ *  - Gemma 3n / 4: `<|channel>thought` … `<channel|>`
+ *  - DeepSeek / Qwen / GLM: ` thinking` … `<｜end▁of▁thinking｜>`
  *
- * 标记可能被切分到相邻的 chunk 里（例如 `<chan` + `nel|>`），所以内部保留一个缓冲：
- * 当尾巴看起来像某个标记的前缀时先扣住不发，等下一个 chunk 拼上再判定。
- * 思考标记只可能出现在输出开头（允许前面有空白），开头不是标记就一律按正文处理。
+ * Markers may be split across adjacent chunks (e.g. `<chan` + `nel|>`), so we keep an internal buffer:
+ * if the tail looks like a prefix of a marker, hold it back and wait for the next chunk before deciding.
+ * Thought markers can only appear at the very start of the output (leading whitespace allowed); anything else is body.
  */
 class ReasoningSplitter(
     private val onThought: (String) -> Unit,
@@ -20,13 +20,13 @@ class ReasoningSplitter(
     private val starts = listOf("<|channel>thought", " thinking")
     private val ends = listOf("<channel|>", "<|channel|>", "<｜end▁of▁thinking｜>")
 
-    /** 0 = 还没确定（等开头的思考标记）；1 = 思考中；2 = 正文中 */
+    /** 0 = undecided (waiting for a leading thought marker); 1 = thinking; 2 = body */
     private var state = if (assumeThinking) 1 else 0
     private val buf = StringBuilder()
     private var totalThought = 0
 
     private companion object {
-        /** 开了思考模式但一直没碰到结束标记时，超过这个长度就当作普通正文，避免误吞。 */
+        /** When thought mode is on but the end marker never arrives, treat content beyond this length as plain body to avoid swallowing it. */
         const val ASSUMED_THINK_LIMIT = 4000
     }
 
@@ -49,7 +49,7 @@ class ReasoningSplitter(
                     // se separa de la respuesta.
                     val hit = findFirst(s, starts)
                     if (hit != null) {
-                        // 标记之前的内容（含前导空白）按正文输出
+                        // Content before the marker (including leading whitespace) is emitted as body
                         // El texto previo al marcador se EMITE, no se pierde:
                         // `lead` son solo los blancos iniciales, pero puede
                         // haber texto antes del marcador.
@@ -88,7 +88,7 @@ class ReasoningSplitter(
                         state = 2
                         again = true
                     } else {
-                        // 预设的“思考中”一直没有遇到结束标记：超长就当普通正文，避免误吞
+                        // Presumed "thinking" never hit the end marker: treat overlong content as plain body, avoid swallowing it
                         if (totalThought + s.length > ASSUMED_THINK_LIMIT) {
                             onAnswer(s)
                             buf.setLength(0)
@@ -112,7 +112,7 @@ class ReasoningSplitter(
         }
     }
 
-    /** 流结束时把缓冲里剩下的内容冲刷出去（思考段未闭合时算思考）。 */
+    /** Flush whatever remains in the buffer at end of stream (an unclosed thought segment counts as thought). */
     fun finish() {
         val s = buf.toString()
         if (s.isEmpty()) return
@@ -133,7 +133,7 @@ class ReasoningSplitter(
         return if (bestMarker != null) bestIndex to bestMarker else null
     }
 
-    /** s 的尾部有多少个字符可能是某个标记的开头（需要先扣住等后续 chunk）。 */
+    /** How many trailing characters of s could be the start of some marker (needs to be held back until the next chunk). */
     private fun pendingTail(s: String, markers: List<String>): Int {
         var best = 0
         for (m in markers) {

@@ -6,15 +6,15 @@ import java.io.File
 import java.io.FileInputStream
 
 /**
- * 轻量 GGUF 头部探测：判断一个 .gguf 是语言模型还是画图模型。
+ * Lightweight GGUF header probe: tells whether a .gguf is a language model or an image model.
  *
- * 依据 GGUF 的元数据键 `general.architecture`：
- *  - llama / qwen2 / gemma / gpt2 / ...  → 语言模型
- *  - sd1 / sd2 / sdxl / sd3 / flux / aura / ltxv / hyvid / ... → 画图（扩散）模型
+ * Based on the GGUF metadata key `general.architecture`:
+ *  - llama / qwen2 / gemma / gpt2 / ...  → language model
+ *  - sd1 / sd2 / sdxl / sd3 / flux / aura / ltxv / hyvid / ... → image (diffusion) model
  *
- * 老版 stable-diffusion.cpp 导出的 GGUF 没有 `general.architecture`，
- * 这时退回扫描张量名：出现 `model.diffusion_model.` / `first_stage_model` / `cond_stage_model`
- * 视为画图模型，出现 `blk.` / `token_embd` / `output.weight` 视为语言模型。
+ * GGUFs exported by older stable-diffusion.cpp have no `general.architecture`,
+ * so we fall back to scanning tensor names: `model.diffusion_model.` / `first_stage_model` / `cond_stage_model`
+ * means image model, while `blk.` / `token_embd` / `output.weight` means language model.
  */
 object GgufProbe {
 
@@ -25,22 +25,22 @@ object GgufProbe {
         "hidream", "cosmos", "wan", "lumina2", "qwen_image", "chroma", "kontext"
     )
 
-    /** 画图相关张量名前缀（老版 sd.cpp 导出无 architecture 时的兜底） */
+    /** Image-model tensor name prefixes (fallback for older sd.cpp exports with no architecture) */
     private val IMAGE_TENSOR_HINTS = listOf(
         "model.diffusion_model.", "first_stage_model", "cond_stage_model",
         "vae.", "unet.", "diffusion_model."
     )
 
-    /** 语言模型张量名特征 */
+    /** Language model tensor name features */
     private val LLM_TENSOR_HINTS = listOf(
         "token_embd", "blk.0.attn_q", "blk.0.attn_norm", "output_norm"
     )
 
-    private const val MAX_HEADER_BYTES = 16L * 1024 * 1024   // 头部上限，防异常文件
+    private const val MAX_HEADER_BYTES = 16L * 1024 * 1024   // header size limit, guards against malformed files
     private const val MAX_KV = 4096
     private const val MAX_TENSORS_SCAN = 600
 
-    /** GGUF general.file_type → 可读量化名 */
+    /** GGUF general.file_type → human-readable quantization name */
     private val FT_NAMES = mapOf(
         0 to "F32", 1 to "F16", 2 to "Q4_0", 3 to "Q4_1", 7 to "Q8_0",
         8 to "Q5_0", 9 to "Q5_1", 10 to "Q2_K", 11 to "Q3_K_S", 12 to "Q3_K_M",
@@ -48,7 +48,7 @@ object GgufProbe {
         17 to "Q5_K_M", 18 to "Q6_K", 19 to "IQ2_XXS", 30 to "BF16",
     )
 
-    /** 读取 GGUF 量化等级（元数据键 general.file_type）；拿不到返回 null。 */
+    /** Read GGUF quantization type (metadata key general.file_type); null if unavailable. */
     fun quantType(file: File): String? = try {
         FileInputStream(file).use { fis ->
             BufferedInputStream(fis, 1 shl 16).use { ins -> parseFileType(ins) }
@@ -71,7 +71,7 @@ object GgufProbe {
                 val v = when (vt) {
                     4, 5 -> readU32(ins)?.toLong()
                     10 -> readU64(ins)
-                    6 -> readU32(ins)?.toLong()   // 兼容故意写成 f32 的导出
+                    6 -> readU32(ins)?.toLong()   // tolerate exports that deliberately store it as f32
                     else -> null
                 }
                 return FT_NAMES[(v ?: return null).toInt()] ?: "type=${v}"
@@ -81,7 +81,7 @@ object GgufProbe {
         return null
     }
 
-    /** 探测文件；只读元数据区，不加载张量数据。失败返回 UNKNOWN。 */
+    /** Probe a file; reads only the metadata section, never tensor data. Returns UNKNOWN on failure. */
     fun probe(file: File): Kind {
         return try {
             FileInputStream(file).use { fis ->
@@ -120,7 +120,7 @@ object GgufProbe {
 
         if (arch != null) return classify(arch)
 
-        // 没有 general.architecture：扫张量名兜底
+        // no general.architecture: fall back to scanning tensor names
         return scanTensors(ins)
     }
 
@@ -129,13 +129,13 @@ object GgufProbe {
         if (a.isEmpty()) return Kind.UNKNOWN
         if (a in IMAGE_ARCH) return Kind.IMAGE
         if (a.contains("sd") || a.contains("flux") || a.contains("diffusion")) return Kind.IMAGE
-        if (a == "clip" || a == "t5" || a == "t5encoder") return Kind.UNKNOWN // 文本编码器，非整模
+        if (a == "clip" || a == "t5" || a == "t5encoder") return Kind.UNKNOWN // text encoder, not a full model
         return Kind.LLM
     }
 
     private fun fallback(arch: String?): Kind = arch?.let { classify(it) } ?: Kind.UNKNOWN
 
-    /** KV 读完后扫张量名 */
+    /** Scan tensor names after the KV section is read */
     private fun scanTensors(ins: BufferedInputStream): Kind {
         var image = 0
         var llm = 0
@@ -153,7 +153,7 @@ object GgufProbe {
         }
     }
 
-    /** 跳过 KV 值；返回 (消费字节数, 若为字符串则返回其内容) */
+    /** Skip a KV value; returns (bytes consumed, string content if it was a string) */
     private fun skipValue(ins: BufferedInputStream, vtype: Int, captureString: Boolean): Pair<Long, String?>? {
         return when (vtype) {
             0, 1, 7 -> { readBytes(ins, 1); 1L to null }
@@ -172,7 +172,7 @@ object GgufProbe {
                     2, 3 -> 2L
                     4, 5, 6 -> 4L
                     10, 11, 12 -> 8L
-                    8 -> -1L      // 字符串数组，元素变长
+                    8 -> -1L      // string array, variable-length elements
                     else -> return null
                 }
                 var bytes = 4L + 8L
@@ -193,7 +193,7 @@ object GgufProbe {
         }
     }
 
-    // ---------- 基础读取（小端） ----------
+    // ---------- Primitive reads (little-endian) ----------
 
     private fun readBytes(ins: BufferedInputStream, n: Int): ByteArray? {
         val buf = ByteArray(n)

@@ -14,17 +14,17 @@ import java.io.File
 import java.nio.FloatBuffer
 
 /**
- * 图像打标（Tagger）引擎。
+ * Image tagging (Tagger) engine.
  *
- * 用 **ONNX Runtime** 跑用户自己导入的 Danbooru 系 `.onnx` 打标模型（如 WD14，配 `selected_tags.csv`），
- * 把一张图反推成 Danbooru 风格的 tag（`1girl, solo, ...`），正好是 SD1.5 / SDXL 动漫模型吃的提示词。
+ * Runs user-imported Danbooru-style `.onnx` tagger models (e.g. WD14 with `selected_tags.csv`) via **ONNX Runtime**,
+ * turning an image back into Danbooru-style tags (`1girl, solo, ...`) -- exactly the prompts SD1.5 / SDXL anime models expect.
  *
- * 与 sd.cpp 无关：模型不内置、不下载，只读用户导入的本地文件。
- * 运行后端跟随「模型」页的运行方式：CPU = XNNPACK/CPU EP；GPU = NNAPI。
+ * Independent of sd.cpp: models are not bundled or downloaded, only user-imported local files are read.
+ * Backend follows the "Models" page run mode: CPU = XNNPACK/CPU EP; GPU = NNAPI.
  */
 object TaggerEngine {
 
-    /** 标签表里的一行：名字 + 类别（0=general，4=character，9=rating，打标结果里跳过 9） */
+    /** One row of the tag table: name + category (0=general, 4=character, 9=rating; 9 is skipped in results) */
     data class Tag(val name: String, val category: Int)
 
     private var env: OrtEnvironment? = null
@@ -43,7 +43,7 @@ object TaggerEngine {
     fun fileNames(): Pair<String?, String?> = modelFile?.name to csvFile?.name
     fun backendLabel(): String = if (usingGpu) "NNAPI" else "CPU"
 
-    /** 解析 selected_tags.csv：`tag_id,name,category,count`，行序 = 模型输出下标 */
+    /** Parse selected_tags.csv: `tag_id,name,category,count`, row order = model output index */
     fun parseCsv(file: File): List<Tag> {
         val out = ArrayList<Tag>()
         runCatching {
@@ -62,8 +62,8 @@ object TaggerEngine {
     }
 
     /**
-     * 加载模型 + 标签表。返回 null = 成功，否则为错误文案。
-     * 可能耗时（几秒），务必在 IO 线程调用。
+     * Load model + tag table. Returns null on success, otherwise an error message.
+     * Can take seconds, so always call on an IO thread.
      */
     fun load(ctx: Context, model: File, csv: File, useGpu: Boolean, threads: Int): String? {
         return try {
@@ -73,8 +73,8 @@ object TaggerEngine {
 
             val e = OrtEnvironment.getEnvironment()
             val opts = OrtSession.SessionOptions()
-            // 线程数由调用方按「设备真实可用核数」算好（InferConfig），这里只兜住下界，
-            // 不再自行封顶 —— 否则用户设了 12 线程会被这里悄悄压回 8（2026-10-13 修正）。
+            // Caller computes the thread count from real usable cores (InferConfig); here we only clamp the lower bound
+            // and never cap -- otherwise a user-set 12 threads would be silently cut back to 8 (fix 2026-10-13).
             runCatching { opts.setIntraOpNumThreads(threads.coerceAtLeast(1)) }
             var gpuOk = false
             if (useGpu) {
@@ -122,10 +122,10 @@ object TaggerEngine {
     }
 
     /**
-     * 打标。返回按分数降序的 (tag, 分数) 列表；threshold 以下被丢弃，最多 topK 个（<=0 表示不限）。
+     * Tag an image. Returns (tag, score) pairs sorted by score descending; below threshold is dropped, at most topK (<=0 = unlimited).
      *
-     * rgbOrder = false 用 BGR（WD 系官方预处理，默认），true 用 RGB（少数重导出模型可能已经
-     * 把 BGR 转换烘进模型，那种情况需切成 RGB）。
+     * rgbOrder = false uses BGR (WD official preprocessing, default), true uses RGB (a few re-exported models may
+     * already bake the BGR conversion in; those need RGB).
      */
     fun run(bitmap: Bitmap, threshold: Float, topK: Int, rgbOrder: Boolean = false): List<Pair<String, Float>> {
         val s = session ?: return emptyList()
@@ -145,13 +145,13 @@ object TaggerEngine {
             val raw = FloatArray(fb.remaining())
             fb.get(raw)
 
-            // 输出可能是原始 logits（有负值/大于 1），也可能已经是概率 —— 自动判断
+            // Output may be raw logits (negative / >1) or already probabilities -- detect automatically
             val needSigmoid = raw.any { it < 0f || it > 1f }
             val limit = minOf(raw.size, tags.size)
             val list = ArrayList<Pair<String, Float>>()
             for (i in 0 until limit) {
                 val t = tags[i]
-                if (t.category == 9) continue // 跳过分级（rating）标签
+                if (t.category == 9) continue // skip rating tags
                 val v = if (needSigmoid) sigmoid(raw[i]) else raw[i]
                 if (v >= threshold) list.add(t.name to v)
             }
@@ -166,11 +166,11 @@ object TaggerEngine {
     private fun sigmoid(x: Float): Float = 1f / (1f + kotlin.math.exp(-x))
 
     /**
-     * 预处理：白底居中 letterbox → n×n → **BGR、0~255**。
+     * Preprocess: white-background center letterbox -> n×n -> **BGR, 0~255**.
      *
-     * 关键：WD 系模型（WD14 等）吃的是 **0~255 的原始像素值**，绝不能除以 255 —— 除了之后模型会把
-     * 彩色图当成低对比度的怪图，稳定输出 monochrome / greyscale / no_humans 这类错误标签。
-     * 颜色通道按 BGR 排列（与训练一致）。nhwc=true 输出交错排列，否则按平面（NCHW）排列。
+     * Key point: WD models (WD14 etc.) expect **raw 0~255 pixel values** and must never be divided by 255 -- doing so makes them
+     * read color images as low-contrast oddities and reliably output wrong tags like monochrome / greyscale / no_humans.
+     * Channels are BGR (matching training). nhwc=true interleaves channels, otherwise planes (NCHW).
      */
     private fun preprocess(src: Bitmap, n: Int, rgbOrder: Boolean): FloatBuffer {
         val scale = n.toFloat() / maxOf(src.width, src.height)
@@ -186,14 +186,14 @@ object TaggerEngine {
         val px = IntArray(n * n)
         square.getPixels(px, 0, n, 0, 0, n, n)
         val buf = FloatBuffer.allocate(n * n * 3)
-        // BGR（默认）：B,G,R；RGB：R,G,B。shift 依次对应当前顺序的三个通道
+        // BGR (default): B,G,R; RGB: R,G,B. shifts map to the three channels in that order
         val shifts = if (rgbOrder) intArrayOf(16, 8, 0) else intArrayOf(0, 8, 16)
         if (nhwc) {
             for (p in px) {
                 for (sh in shifts) buf.put(((p shr sh) and 0xFF).toFloat())
             }
         } else {
-            for (sh in shifts) {                              // 三个平面
+            for (sh in shifts) {                              // three planes
                 for (p in px) buf.put(((p shr sh) and 0xFF).toFloat())
             }
         }

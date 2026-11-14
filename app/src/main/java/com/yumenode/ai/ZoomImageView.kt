@@ -9,9 +9,9 @@ import android.view.ScaleGestureDetector
 import android.widget.ImageView
 
 /**
- * 全屏看图用的 ImageView：双指缩放 + 拖动 + 双击放大，缩放范围 1x~8x。
+ * ImageView for fullscreen image viewing: pinch-zoom + drag + double-tap to zoom, range 1x~8x.
  *
- * 从 MainActivity 摘出：自包含的自定义 View，无 Activity 依赖。
+ * Extracted from MainActivity: self-contained custom View, no Activity dependency.
  */
 internal class ZoomImageView(ctx: Context) : ImageView(ctx) {
     private val mtx = Matrix()
@@ -60,7 +60,7 @@ internal class ZoomImageView(ctx: Context) : ImageView(ctx) {
         reset()
     }
 
-    /** 回到「适配并居中」状态 */
+    /** Back to the "fit & center" state */
     fun reset() {
         val d = drawable ?: return
         val vw = width.toFloat()
@@ -76,7 +76,7 @@ internal class ZoomImageView(ctx: Context) : ImageView(ctx) {
         imageMatrix = mtx
     }
 
-    /** 缩放后把图拉回可视范围，避免拖出去找不回来 */
+    /** After zooming, pull the image back into the visible area so it can't be dragged out of reach */
     private fun clamp() {
         if (cur <= 1.01f) { reset(); return }
         val d = drawable ?: return

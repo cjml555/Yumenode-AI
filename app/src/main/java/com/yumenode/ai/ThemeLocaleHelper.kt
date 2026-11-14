@@ -25,7 +25,7 @@ internal fun barLuminance(c: Int): Float {
     return (0.299f * r + 0.587f * g + 0.114f * b) / 255f
 }
 
-/** 状态栏 / 导航栏配色（跟随主题） */
+/** Status bar / navigation bar colors (follows the theme) */
 internal fun applySystemBarColors(window: Window, pal: YumenodeTheme) {
     window.statusBarColor = pal.statusBar
     window.navigationBarColor = pal.navBar

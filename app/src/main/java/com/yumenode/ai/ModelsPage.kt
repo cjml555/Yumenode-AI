@@ -92,7 +92,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             setPadding(dp(12), dp(12), dp(12), 0)
         }
 
-        // ================= 运行方式（对话 / 绘图共用） =================
+        // ================= Run mode (shared by chat / drawing) =================
         val card = ui.sectionCard()
         card.addView(ui.pageTitle(getString(R.string.s_181)))
         val row = LinearLayout(activity).apply {
@@ -125,7 +125,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             matchWrap(topMargin = 4)
         )
 
-        // ================= 对话模型 =================
+        // ================= Chat model =================
         val chatCard = ui.sectionCard()
         chatCard.addView(ui.pageTitle(getString(R.string.s_076)))
         chatCard.addView(ui.hintText(getString(R.string.s_122)))
@@ -148,7 +148,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         }
         chatCard.addView(savedContainer, matchWrap(topMargin = 6))
 
-        // ---- gguf 多模态：视觉投影文件（mmproj）----
+        // ---- gguf multi-modal: vision projection file (mmproj) ----
         chatCard.addView(ui.divider(), matchWrap(topMargin = 10))
         chatCard.addView(ui.subTitle(getString(R.string.s_280)), matchWrap(topMargin = 10))
         chatCard.addView(ui.hintText(getString(R.string.s_281)), matchWrap(topMargin = 4))
@@ -179,7 +179,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         )
         host.onRefreshMmprojUi()
 
-        // 加载按钮放在对话参数之上（参数按模型分别保存，先选/先加载模型更顺手）
+        // Load button sits above the chat params (params are saved per model; selecting/loading the model first is more natural)
         loadButton = ui.actionButton(getString(R.string.s_060)) { host.onToggleLoad() }
         chatCard.addView(loadButton, matchWrap(topMargin = 8))
 
@@ -191,7 +191,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         }
         chatCard.addView(progressBar, matchWrap(topMargin = 8))
 
-        // ---- 对话参数：上下文/采样等，模型页直接可调 ----
+        // ---- Chat params: context/sampling etc., adjustable right on the Models page ----
         chatCard.addView(ui.divider(), matchWrap(topMargin = 12))
         chatCard.addView(ui.subTitle(getString(R.string.s_303)), matchWrap(topMargin = 10))
         chatCard.addView(ui.hintText(getString(R.string.s_304)), matchWrap(topMargin = 4))
@@ -261,7 +261,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             matchWrap(topMargin = 8)
         )
 
-        // ================= 对话 API =================
+        // ================= Chat API =================
         chatApiModelTv = TextView(activity).apply {
             textSize = 12f
             setTextColor(C_TEXT)
@@ -295,7 +295,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         chatModelPane = ModelsHelpers.modelsPane(activity, chatCard)
         chatApiPane = ModelsHelpers.modelsPane(activity, apiCard)
         val chatPane = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        // 与上面那行拉开距离
+        // Spacing from the row above
         chatPane.addView(chatSubBar, matchWrap(topMargin = 12))
         chatPane.addView(
             chatModelPane,
@@ -309,7 +309,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         host.onRefreshApiUi()
         host.onLoadChatParamsIntoUi()
 
-        // ================= 绘图模型 =================
+        // ================= Drawing model =================
         val drawCard = ui.sectionCard()
         drawCard.addView(ui.pageTitle(getString(R.string.s_155)))
         drawCard.addView(
@@ -356,7 +356,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         }
         drawCard.addView(drawSavedContainer, matchWrap(topMargin = 6))
 
-        // 多文件模型：槽位列表折叠
+        // Multi-file models: collapsed slot list
         slotsHeader = TextView(activity).apply {
             textSize = 13f
             setTextColor(C_PRIMARY)
@@ -443,7 +443,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             matchWrap(topMargin = 10)
         )
 
-        // ---- 绘图 API ----
+        // ---- Drawing API ----
         drawApiModelTv = TextView(activity).apply {
             textSize = 12f
             setTextColor(C_TEXT)
@@ -488,7 +488,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         )
         host.onRefreshDrawApiUi()
 
-        // ================= 打标模型 =================
+        // ================= Tagging model =================
         val taggerCard = ui.sectionCard()
         taggerCard.addView(ui.pageTitle(getString(R.string.s_241)))
         taggerCard.addView(
@@ -514,7 +514,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         taggerLoadBtn = ui.actionButton(getString(R.string.s_254)) { host.onTaggerToggleClickRequested() }
         taggerCard.addView(taggerLoadBtn, matchWrap(topMargin = 8))
 
-        // ---- 顶部常驻「运行方式」+ 页签 + 左右翻页 ----
+        // ---- Fixed top "run mode" + tabs + left/right paging ----
         header.addView(card)
         root.addView(header)
 
@@ -558,7 +558,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         return root
     }
 
-    /** 模型页的翻页适配器：直接复用已建好的三个面板，不重建 */
+    /** Models-page paging adapter: reuses the three already-built panels, no rebuild */
     private class ModelsPaneAdapter(private val panes: List<View>) : PagerAdapter() {
         override fun getCount() = panes.size
         override fun isViewFromObject(view: View, obj: Any) = view === obj

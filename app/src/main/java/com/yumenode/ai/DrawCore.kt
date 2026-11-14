@@ -8,24 +8,26 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 /**
- * 绘图引擎的**共享入口**：App 界面与「API 服务端」的绘图接口都从这里出图。
+ * Shared entry point for the drawing engine: both the app UI and the "API server" drawing
+ * interface generate images from here.
  *
- * 为什么要有这一层（与 [ChatCore] 同一套理由）：sd.cpp 的句柄原本是 DrawPage 的私有字段，
- * 页面/Activity 一销毁就被 free；而 API 服务要在 App 退到后台后继续能出图，所以句柄与参数
- * 必须挂在进程级单例上。DrawPage 加载完模型只是把句柄登记进来（[attach]），
- * 参数改动时把**已经解析好的**参数快照同步过来（[updateParams]），
- * 界面重建 / 换主题都不影响这里。
+ * Why this layer (same reasoning as [ChatCore]): sd.cpp's handle was originally a private field
+ * of DrawPage, freed when the page/Activity is destroyed; but the API service must keep generating
+ * after the app goes to background, so the handle and params must live on a process-level singleton.
+ * DrawPage just registers the handle on load ([attach]); parameter changes sync a snapshot of
+ * the already-parsed params ([updateParams]); view rebuilds or theme changes don't affect it here.
  *
- * 为什么不直接读界面控件：API 的请求线程不是主线程，而 EditText 只能在主线程读；
- * 而且 Activity 销毁后控件状态也不该再被依赖。所以这里存的是「值」不是「控件」。
+ * Why not read UI controls directly: API request threads aren't the main thread, and EditText
+ * can only be read on the main thread; plus after Activity is destroyed, control state shouldn't
+ * be depended on anyway. So this stores "values", not "controls".
  *
- * 串行化：一张图要跑几十秒到几分钟，本地引擎一次只能跑一个任务。
- * [generate] 走 [lock]，并且对外暴露 [busy]；界面出图时通过 [uiBusy] 反向上报，
- * 两边互相避让（界面用 DrawPage.isBusy()，API 用 busy/apiBusy 判断后返回 429）。
+ * Serialization: one image takes tens of seconds to minutes; the local engine runs one task at a time.
+ * [generate] takes [lock] and exposes [busy]; the UI reports its own status via [uiBusy],
+ * and the two sides avoid each other (UI uses DrawPage.isBusy(), API checks busy/apiBusy then returns 429).
  */
 object DrawCore {
 
-    /** 出图参数快照（全部是「已经解析好的最终值」，不含任何 UI 依赖） */
+    /** Parameter snapshot (all "already-parsed final values", no UI dependency) */
     class Params(
         val steps: Int = 20,
         val cfg: Float = 7.0f,
@@ -42,41 +44,41 @@ object DrawCore {
 
     @Volatile private var handle = 0L
 
-    /** 当前已加载的绘图模型名（/v1/models 与状态显示用） */
+    /** Currently loaded drawing model name (used as id by /v1/models and status display) */
     @Volatile var modelName: String? = null
         private set
 
-    /** 实际使用的后端（CPU / Vulkan0…），仅用于展示 */
+    /** Actual backend used (CPU / Vulkan0…), display only */
     @Volatile var backend: String? = null
         private set
 
-    /** 参数快照；界面每次改参数/加载模型都会同步过来 */
+    /** Parameter snapshot; synced by UI on every param change / model load */
     @Volatile private var params = Params()
 
-    /** API 正在出图 */
+    /** API is generating */
     @Volatile var busy = false
         private set
 
-    /** 界面正在出图（由 DrawPage 上报）——API 侧据此避让，别和界面抢同一个句柄 */
+    /** UI is generating (reported by DrawPage) — API side avoids it, don't fight the UI for the same handle */
     @Volatile var uiBusy = false
 
     @Volatile private var cancelFlag = false
 
     private val lock = Mutex()
 
-    /** 登记句柄。**只放引用，不接管所有权**——句柄仍由 DrawPage free。 */
+    /** Registers handle. **Only stores the reference, does not take ownership** — DrawPage still frees the handle. */
     fun attach(h: Long, name: String?, backendName: String? = null) {
         handle = h
         modelName = name
         backend = backendName
     }
 
-    /** 参数快照同步（主线程调用） */
+    /** Syncs parameter snapshot (called from main thread) */
     fun updateParams(p: Params) {
         params = p
     }
 
-    /** 只清引用，不 free（free 由句柄持有者 DrawPage 负责，且**必须先调这个**，否则 API 会拿到已释放的句柄） */
+    /** Clears reference only, does not free (free is DrawPage's responsibility, and **must be called first**, otherwise the API would grab an already-freed handle) */
     fun release() {
         handle = 0L
         modelName = null
@@ -92,12 +94,13 @@ object DrawCore {
     }
 
     /**
-     * 出图（供 API 使用）。没传的字段沿用界面上的当前设置。
+     * Generates (for API use). Fields not passed fall back to current UI settings.
      *
-     * `n` 张图在**同一次持锁**里连着出：不然两张之间会出现一个空档，
-     * 界面正好点「生成」就会插进来抢同一个句柄。
+     * `n` images are generated **in one lock hold** in a row: otherwise a gap appears between two,
+     * and the UI could sneak in and grab the same handle by tapping "generate".
      *
-     * 抢不到锁直接抛异常（上层回 429）——排队没有意义，一张图要跑几分钟。
+     * Failing to get the lock throws an exception (upper layer returns 429) — queueing is pointless;
+     * one image takes minutes.
      */
     suspend fun generate(
         prompt: String,
@@ -111,19 +114,19 @@ object DrawCore {
         sampler: SdCppEngine.Sampler? = null,
         scheduler: SdCppEngine.Scheduler? = null,
         onStep: ((Int, Int) -> Unit)? = null,
-        // ---- 原生 hires fix（sd.cpp 内部实现）----
-        /** 放大倍数（2 = 2×）。0 或 <=1 表示不放大。 */
+        // ---- Native hires fix (sd.cpp internal) ----
+        /** Hires scale multiplier (2 = 2x). 0 or <=1 means no upscaling. */
         hiresScale: Float = 0f,
-        /** 第二轮降噪强度（0.05–0.99）。 */
+        /** Second-round denoising strength (0.05–0.99). */
         hiresDenoise: Float = 0.7f,
-        /** 放大器。 */
+        /** Hires upscaler. */
         hiresUpscaler: SdCppEngine.HiresUpscaler = SdCppEngine.HiresUpscaler.LATENT,
-        // ---- VAE tiling（分块编解码，省内存）----
-        /** 是否启用 VAE 分块。大图在手机上会吃掉几百 MB，分块后峰值只跟 tile 有关。 */
+        // ---- VAE tiling (block encode/decode, saves memory) ----
+        /** Whether VAE tiling is enabled. Large images on phone eat up hundreds of MB; after tiling the peak only depends on tile size. */
         vaeTiling: Boolean = false,
-        /** tile 大小（像素）。 */
+        /** Tile size in pixels. */
         vaeTileSize: Int = 512,
-        /** tile 之间的重叠（0–0.5），避免接缝。 */
+        /** Overlap between tiles (0–0.5), avoids seams. */
         vaeTileOverlap: Float = 0.25f,
     ): List<Result> {
         if (!lock.tryLock()) throw IllegalStateException("绘图引擎正忙")
@@ -134,13 +137,13 @@ object DrawCore {
             val h = handle
             if (h == 0L) throw IllegalStateException("未加载绘图模型")
 
-            // sd.cpp 要求 64 的倍数；夹到 64~2048 防止手滑
+            // sd.cpp requires multiples of 64; clamp to 64~2048 to guard against typos
             val w = (width ?: p.width).let { (it / 64) * 64 }.coerceIn(64, 2048)
             val ht = (height ?: p.height).let { (it / 64) * 64 }.coerceIn(64, 2048)
             val st = (steps ?: p.steps).coerceIn(1, 150)
             val cf = (cfg ?: p.cfg).coerceIn(1f, 30f)
 
-            // 原生 hires fix：目标尺寸 = 基础尺寸 × hiresScale（对齐到 64 的倍数）
+            // Native hires fix: target size = base size × hiresScale (aligned to multiples of 64)
             val useHires = hiresScale > 1.01f
             val targetW = if (useHires) ((w * hiresScale).toInt() / 64 * 64).coerceIn(64, 2048) else w
             val targetH = if (useHires) ((ht * hiresScale).toInt() / 64 * 64).coerceIn(64, 2048) else ht
@@ -148,7 +151,7 @@ object DrawCore {
             val out = ArrayList<Result>(n)
             for (i in 0 until n) {
                 if (cancelFlag) break
-                // 给了 seed 就让第 i 张 = seed+i，保证 n>1 时不是同一张图
+                // If seed given, make image i = seed+i, so n>1 doesn't produce the same image
                 val useSeed = if (seed < 0) System.currentTimeMillis() % 1_000_000_000L else seed + i
                 val bmp = withContext(Dispatchers.IO) {
                     SdCppEngine.render(
@@ -175,10 +178,10 @@ object DrawCore {
                         vaeTileSize = vaeTileSize,
                         vaeTileOverlap = vaeTileOverlap.coerceIn(0f, 0.5f),
                     )
-                } ?: throw IllegalStateException("生成失败（引擎返回空图）")
+                } ?: throw IllegalStateException("Generation failed (engine returned empty bitmap)")
                 out.add(Result(bmp, useSeed))
             }
-            if (out.isEmpty()) throw IllegalStateException("已取消")
+            if (out.isEmpty()) throw IllegalStateException("Cancelled")
             return out
         } finally {
             busy = false

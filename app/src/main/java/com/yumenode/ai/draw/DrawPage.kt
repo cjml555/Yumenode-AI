@@ -46,31 +46,31 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.roundToInt
 
-/** 用户主动中断生成时抛出（与真正的失败区分开）。消息不面向用户，用固定英文。 */
+/** Thrown when the user cancels generation (distinct from a real failure). Message is not user-facing; fixed English. */
 class GenerationCancelledException : RuntimeException("Generation cancelled")
 
 /**
- * 绘图页（文生图）。
+ * Draw page (text-to-image).
  *
- * 引擎为 **自编的 stable-diffusion.cpp**（libstable-diffusion.so + libponko_sd.so JNI 桥），直接读 `.gguf` 绘图模型
- * （Anything V5 / ChilloutMix / Pony 等 SD1.5 系；CivitAI 上几乎都有 GGUF 版）。
+ * Engine is **self-built stable-diffusion.cpp** (libstable-diffusion.so + libponko_sd.so JNI bridge), reading `.gguf` draw models
+ * (Anything V5 / ChilloutMix / Pony and other SD1.5-family ones; nearly all have GGUF builds on CivitAI).
  *
- * 加速有两条**互相独立**的线，可以叠加：
- *  - **量化**：由模型文件本身决定（Q4_0 每步比 Q8_0 便宜不少）。App 只读取并展示，不能凭空转换。
- *  - **LoRA**：挂 LCM-LoRA 这类「少步蒸馏补丁」，把 20 步压到 4~8 步（约 5 倍）。
+ * Two **independent** acceleration paths, stackable:
+ *  - **Quantization**: set by the model file itself (Q4_0 costs much less per step than Q8_0). App only reads and shows it, cannot convert on the fly.
+ *  - **LoRA**: attach an LCM-LoRA-style "few-step distillation patch", compressing 20 steps to 4~8 (~5x).
  *
- * LoRA 文件放在 filesDir/draw/lora/，通过 prompt 里的 `lora:名字:权重` 语法激活。
+ * LoRA files live in filesDir/draw/lora/, activated via the `lora:名字:权重` syntax in the prompt.
  */
 class DrawPage(
     private val act: Activity,
     private val scope: CoroutineScope,
     /**
-     * 配色表（浅色 / 深色由 MainActivity 决定）。
-     * 下面三个只是它的便捷取用点；切换主题时整个 Activity 重建，页面随之重画。
+     * Palette (light / dark decided by MainActivity).
+     * The three below are just convenience accessors; a theme switch rebuilds the whole Activity and the page is redrawn.
      */
     pal: YumenodeTheme,
 ) {
-    /** 配色表；换主题时先 setPalette 再 build() 重建本页视图（native 句柄等字段都保留） */
+    /** Palette; on theme switch call setPalette then build() to rebuild this page's views (native handle and other fields kept) */
     var pal: YumenodeTheme = pal
         private set
 
@@ -78,24 +78,24 @@ class DrawPage(
     private val textColor: Int get() = pal.text
     private val subText: Int get() = pal.subText
 
-    /** 换配色（下次 build() 生效） */
+    /** Switch palette (applies on the next build()) */
     fun setPalette(p: YumenodeTheme) { pal = p }
 
-    /** 是否正在出图（换主题要重建视图，出图途中不适合重建） */
+    /** Whether an image is being generated (theme switch rebuilds views; not safe to rebuild mid-generation) */
     fun isBusy(): Boolean = generating
 
     companion object {
         const val DIR_NAME = "draw"
-        /** 打标模型/标签表目录：filesDir/tagger */
+        /** Tagger model / tag table dir: filesDir/tagger */
         const val TAGGER_DIR = "tagger"
 
-        /** 尺寸预设（方形，px）。sd.cpp 要求 64 的倍数，这里全是对齐的。 */
+        /** Size presets (square, px). sd.cpp requires multiples of 64; all of these are aligned. */
         private val SIZE_PRESETS = listOf(64, 128, 256, 384, 512)
         private const val REQ_IMAGE = 0x5D02
         private const val REQ_TAGGER_IMAGE = 0x5D03
 
         /**
-         * TAESD（Tiny AutoEncoder）：蒸馏过的迷你 VAE，替代完整 VAE 做编解码。
+         * TAESD (Tiny AutoEncoder): distilled mini VAE replacing the full VAE for encode/decode.
          * En CPU es MUCH más rápido que el VAE completo (un orden de magnitud menos
          * de cómputo) y usa mucho menos pico de memoria.
          * El archivo diffusion_pytorch_model.safetensors trae encoder + decoder juntos,
@@ -107,18 +107,18 @@ class DrawPage(
         /** Tamaño mínimo razonable del archivo TAESD (fuente única: [ModelSetStore]) */
         private const val TAESD_MIN_BYTES = ModelSetStore.TAESD_MIN_BYTES
 
-        /** LCM-LoRA：HuggingFace 官方仓库路径（文件实名为 pytorch_lora_weights.safetensors） */
+        /** LCM-LoRA: official HuggingFace repo path (actual file name is pytorch_lora_weights.safetensors) */
         private const val LORA_HF_PATH =
             "latent-consistency/lcm-lora-sdv1-5/resolve/main/pytorch_lora_weights.safetensors"
 
-        /** 下载后重命名成这个，prompt 里就用 `lora:lcm-lora-sdv1-5:1` 引用 */
+        /** Renamed to this after download; referenced in the prompt as `lora:lcm-lora-sdv1-5:1` */
         const val LORA_NAME = "lcm-lora-sdv1-5"
 
-        /** 单文件 / 多文件（fuente única: [ModelSetStore]) */
+        /** Single file / multi file (fuente única: [ModelSetStore]) */
         const val KIND_SINGLE = ModelSetStore.KIND_SINGLE
         const val KIND_MULTI = ModelSetStore.KIND_MULTI
 
-        /** 家族 id */
+        /** Family id */
         const val FAM_SD15 = "sd15"
         const val FAM_SDXL = "sdxl"
         const val FAM_SD3 = "sd3"
@@ -128,7 +128,7 @@ class DrawPage(
         const val FAM_VIDEO = "video"
         const val FAM_OTHER = "other"
 
-        /** 家族显示名 */
+        /** Family display name */
         fun familyLabelRes(family: String): Int = when (family) {
             FAM_SD15 -> R.string.s_337
             FAM_SDXL -> R.string.s_338
@@ -140,7 +140,7 @@ class DrawPage(
             else -> R.string.s_344
         }
 
-        /** 槽位显示名 */
+        /** Slot display name */
         fun slotLabelRes(key: String): Int = when (key) {
             "model" -> R.string.s_347
             "diffusion" -> R.string.s_348
@@ -157,9 +157,9 @@ class DrawPage(
             else -> R.string.s_358
         }
 
-        /** 某个类型需要哪些槽位（key to 是否必填）。
-         *  多文件模型的配套文件各家不一样，这里按家族给模板；用户选了类型就按模板列槽位。
-         *  必填只是「加载前的检查」，不阻止用户尝试（可选槽位留空也允许加载）。 */
+        /** Which slots a kind needs (key to whether required).
+         *  Companion files for multi-file models differ per family; templates here are per family, and slots are listed from the template once the user picks a kind.
+         *  Required is only a pre-load check and does not block a try (optional slots may be left empty). */
         fun familySlots(kind: String, family: String): List<Pair<String, Boolean>> {
             val base = when {
                 kind == KIND_SINGLE && family == FAM_OTHER -> listOf(
@@ -186,17 +186,17 @@ class DrawPage(
                     "clip_vision" to false, "t5xxl" to false, "llm" to false, "llm_vision" to false,
                     "high_noise" to false, "uncond" to false, "audio_vae" to false)
             }
-            // TAESD 是可选的附加项，只在图像模型上出现：
-            // 视频走 TinyVideoAutoEncoder（权重格式不同）、Qwen / HiDream 的 VAE 各走特殊路径，先不暴露。
+            // TAESD is an optional extra, shown only for image models:
+            // video uses TinyVideoAutoEncoder (different weight format), and Qwen / HiDream VAEs take special paths, so not exposed yet.
             return if (family == FAM_VIDEO || family == FAM_QWEN || family == FAM_HIDREAM) base
             else base + ("taesd" to false)
         }
 
-        /** SharedPreferences 文件名与键（只存 UI 偏好） */
+        /** SharedPreferences file name and keys (UI prefs only) */
         private const val PREFS_NAME = "ponko"
         private const val KEY_USE_LORA = "useLora"
 
-        // 绘图参数持久化（提示词按用户要求不保存，每次重来）
+        // Draw param persistence (prompt is not saved per user request; starts over each time)
         private const val KEY_W = "drawW"
         private const val KEY_H = "drawH"
         private const val KEY_STEPS = "drawSteps"
@@ -204,20 +204,20 @@ class DrawPage(
         private const val KEY_SEED = "drawSeed"
         private const val KEY_LORA_SCALE = "drawLoraScale"
         private const val KEY_UPSCALE_STRENGTH = "upscaleStrength"
-        /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+        /** Upscale mode: 0 = img2img redraw, 1 = sd.cpp native hires fix */
         private const val KEY_UPSCALE_MODE = "upscaleMode"
-        /** 原生 hires fix 的放大器索引 */
+        /** Upscaler index for native hires fix */
         private const val KEY_UPSCALE_UPSCALER = "upscaleUpscaler"
-        /** VAE tiling（分块编解码）开关 */
+        /** VAE tiling (tiled encode/decode) toggle */
         private const val KEY_VAE_TILING = "vaeTiling"
-        /** VAE tiling 的块大小（px） */
+        /** VAE tiling tile size (px) */
         private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
-        /** VAE tiling 的块重叠（0–0.5） */
+        /** VAE tiling tile overlap (0–0.5) */
         private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
-        // 图生图参数（与文生图分开存）
+        // img2img params (stored separately from text-to-image)
         private const val KEY_I2I_W = "i2iW"
         private const val KEY_I2I_H = "i2iH"
         private const val KEY_I2I_STEPS = "i2iSteps"
@@ -228,20 +228,20 @@ class DrawPage(
         private const val KEY_I2I_SAMPLER = "i2iSampler"
         private const val KEY_I2I_SCHEDULER = "i2iScheduler"
 
-        // 打标（Tagger）
+        // Tagging (Tagger)
         private const val KEY_TAG_THRESHOLD = "tagThreshold"
         private const val KEY_TAG_TOPK = "tagTopK"
-        private const val KEY_TAG_CHAN = "tagChan"   // 0 = BGR（WD 系默认），1 = RGB
+        private const val KEY_TAG_CHAN = "tagChan"   // 0 = BGR (WD default), 1 = RGB
     }
 
     private val c: Context get() = act
 
-    /** 自编 sd.cpp 的上下文句柄（0 = 未加载） */
+    /** Context handle of the self-built sd.cpp (0 = not loaded) */
     private var sdHandle: Long = 0L
     private var mainModel: File? = null
     private var vaeModel: File? = null
 
-    /** 当前模型集（单文件 = 只填主模型；多文件 = 主模型 + 各槽位配套文件） */
+    /** Current model set (single file = main model only; multi file = main model + companion file per slot) */
     private var activeSet: ModelSet? = null
 
     /**
@@ -249,34 +249,34 @@ class DrawPage(
      * Extraido de esta clase para que la logica de disco quede testeable en JVM.
      */
     private val setStore: ModelSetStore = ModelSetStore(c.filesDir, prefs())
-    /** 下一个要导入的类型（由「模型」页的类型菜单设定） */
+    /** Kind of the next import (set by the type menu on the "Models" page) */
     var pendingKind: String = KIND_SINGLE
     var pendingFamily: String = FAM_SD15
-    /** true = 下一个导入的文件用来开一个新模型集 */
+    /** true = the next imported file opens a new model set */
     var pendingNewSet: Boolean = false
 
-    /** 推理线程数：**全局设置**（[InferConfig]），绘图 / 对话 gguf / 打标三条路径共用。
-     *  现读不缓存 —— 在「关于 → 设置」里改完，下次加载模型就用到新值。 */
+    /** Inference thread count: **global setting** ([InferConfig]), shared by draw / chat gguf / tagger paths.
+     *  Read on demand, not cached — change it in "About → Settings" and the next model load uses the new value. */
     private val nThreads: Int get() = InferConfig.threads(c)
 
-    /** FlashAttention（CLIP + UNet）。实测不开每步慢约 28%（6 步 125s vs 98s）。 */
+    /** FlashAttention (CLIP + UNet). Measured ~28% slower per step when off (6 steps 125s vs 98s). */
     private var flashAttn: Boolean = true
 
-    /** 外部（MainActivity）通知：当前已加载语言模型。用于「生成」按钮给出更准确的提示。 */
+    /** External (MainActivity) notice: an LLM is currently loaded. Lets the "Generate" button give a more accurate hint. */
     var llmLoaded: Boolean = false
 
-    /** 状态回调：把绘图页的进度/结果同步到主界面顶栏。(文本, 是否出错) */
+    /** Status callback: sync draw page progress/result to the main UI top bar. (text, isError) */
     var onStatus: ((String, Boolean) -> Unit)? = null
 
-    /** 运行方式：true = 尝试 GPU（Vulkan），false = 纯 CPU。由模型页的「运行方式」决定。 */
+    /** Run mode: true = try GPU (Vulkan), false = CPU only. Set by the "run mode" on the model page. */
     var useGpu: Boolean = false
 
-    /** 当前绘图实际用的后端（"CPU" / "Vulkan0"），显示在状态行 */
+    /** Backend actually used for drawing ("CPU" / "Vulkan0"), shown in the status line */
     private var activeBackend: String = "CPU"
 
     /**
-     * 是否启用 LoRA 加速（挂 LCM-LoRA，压低步数）。
-     * 状态持久化到 SharedPreferences —— 否则每次启动 App 都要重新勾。
+     * Whether LoRA acceleration is enabled (attach LCM-LoRA, reduce steps).
+     * State persisted to SharedPreferences — otherwise it would be re-checked on every app start.
      */
     var useLora: Boolean = c.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_LORA, false)
@@ -286,7 +286,7 @@ class DrawPage(
                 .edit().putBoolean(KEY_USE_LORA, value).apply()
         }
 
-    /** 当前选中的 LoRA（null = 自动取目录里第一个） */
+    /** Currently selected LoRA (null = take the first in the directory) */
     private var loraFile: File? = null
 
     /**
@@ -301,17 +301,17 @@ class DrawPage(
      */
     private val taggerStore: TaggerStore = TaggerStore(c.filesDir, prefs())
 
-    /** SD 管线就绪时回调（MainActivity 借此切到绘图模式） */
+    /** Callback when the SD pipeline is ready (MainActivity switches to draw mode on it) */
     var onPipelineReady: (() -> Unit)? = null
 
-    /** 是否已就绪（可生成） */
+    /** Whether ready (can generate) */
     fun isReady(): Boolean = sdHandle != 0L
 
     /**
-     * 把**已经解析好的出图参数**同步给 [DrawCore]，供 API 的绘图接口使用。
+     * Sync the **already parsed draw params** to [DrawCore] for the API's draw endpoint.
      *
-     * 必须在主线程调用：EditText 只能在主线程读，而且 Activity 销毁后控件也不该再被依赖，
-     * 所以 DrawCore 存的是「值」而不是控件引用。
+     * Must be called on the main thread: EditText can only be read there, and views must not be relied on after the Activity is destroyed,
+     * so DrawCore stores "values", not view references.
      */
     fun syncDrawCore() {
         if (!::stepsEdit.isInitialized || sdHandle == 0L) return
@@ -331,7 +331,7 @@ class DrawPage(
         )
     }
 
-    // 控件
+    // Views
     private lateinit var statusText: TextView
     private lateinit var quantText: TextView
     private lateinit var modelCardTitle: TextView
@@ -344,55 +344,55 @@ class DrawPage(
     private lateinit var loraHint: TextView
     private lateinit var genBtn: Button
 
-    /** 是否正在生成（同一个按钮在「开始生成 / 中断生成」之间切换） */
+    /** Whether generating (the same button toggles between "Start generation / Cancel generation") */
     private var generating = false
     private lateinit var progressText: TextView
     private lateinit var progressBar: ProgressBar
 
-    // 宽 / 高（可自由填，sd.cpp 要求 64 的倍数）
+    // Width / height (free input; sd.cpp requires multiples of 64)
     private lateinit var widthEdit: EditText
     private lateinit var heightEdit: EditText
-    /** 预设尺寸按钮组：点一下就把 width/height 两个输入框填成对应值 */
+    /** Preset size button group: one tap fills both width/height inputs with the matching value */
     private val sizePresetButtons = mutableListOf<android.widget.Button>()
-    /** 当前选中的预设尺寸（0 = 自定义）；null 表示尺寸跟预设不一致 */
+    /** Currently selected preset size (0 = custom); null = size does not match a preset */
     private var selectedSizePreset: Int? = null
-    /** 自定义尺寸行：只有选「Personalizado」时才显示 */
+    /** Custom size row: only shown when "Personalizado" is selected */
     private var customSizeRow: View? = null
-    /** 程序化改宽高时置 true，免得 watcher 把预设高亮清掉 */
+    /** Set true when width/height are changed programmatically, so the watcher doesn't clear the preset highlight */
     private var suppressPresetSync = false
 
-    // 采样器 / 调度器（第 0 项 = 自动）
+    // Sampler / scheduler (item 0 = auto)
     private lateinit var samplerSpinner: android.widget.Spinner
     private lateinit var schedulerSpinner: android.widget.Spinner
 
-    /** LoRA 权重 */
+    /** LoRA weight */
     private lateinit var loraScaleEdit: EditText
 
-    // 顶部菜单：参数 / 结果
+    // Top menu: params / result
     private lateinit var tabParams: TextView
     private lateinit var tabResult: TextView
     private lateinit var paramPane: LinearLayout
     private lateinit var resultPane: LinearLayout
     private lateinit var pager: ViewPager
 
-    // 结果面板
+    // Result panel
     private lateinit var resultImg: ImageView
     private lateinit var resultInfo: TextView
-    /** 取消按钮（pestaña Resultado）：只在出图中显示，平时隐藏 */
+    /** Cancel button (pestaña Resultado): only while generating, hidden otherwise */
     private lateinit var resultCancelBtn: Button
-    /** 放大进度条（pestaña Resultado）：只在放大中显示 */
+    /** Upscale progress bar (pestaña Resultado): only while upscaling */
     private lateinit var upscaleProgressBar: ProgressBar
-    /** 放大进度文字（pestaña Resultado） */
+    /** Upscale progress text (pestaña Resultado) */
     private lateinit var upscaleProgressText: TextView
-    /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+    /** Upscale mode: 0 = img2img redraw, 1 = sd.cpp native hires fix */
     private lateinit var upscaleModeSpinner: android.widget.Spinner
-    /** 原生 hires fix 用的放大器 */
+    /** Upscaler used by native hires fix */
     private lateinit var upscaleUpscalerSpinner: android.widget.Spinner
-    /** VAE tiling 开关 */
+    /** VAE tiling toggle */
     private lateinit var vaeTilingCheck: CheckBox
-    /** VAE tiling 的块大小 */
+    /** VAE tiling tile size */
     private lateinit var vaeTileSizeEdit: EditText
-    /** VAE tiling 的块重叠 */
+    /** VAE tiling tile overlap */
     private lateinit var vaeTileOverlapEdit: EditText
     private lateinit var saveBtn: Button
     private lateinit var upscaleBtn: Button
@@ -401,10 +401,10 @@ class DrawPage(
     private lateinit var historyRow: LinearLayout
     private lateinit var histEmpty: TextView
 
-    /** 最近一次生成的图（结果页「保存到相册」用） */
+    /** Last generated image (used by "Save to gallery" on the result page) */
     private var lastImage: Bitmap? = null
 
-    // ---- 结果面板子页：结果 / 过程（生成过程实时预览） ----
+    // ---- Result panel subpages: result / process (live preview of generation) ----
     private lateinit var tabResResult: TextView
     private lateinit var tabResProcess: TextView
     private lateinit var resultContent: LinearLayout
@@ -412,21 +412,21 @@ class DrawPage(
     private lateinit var previewImg: ImageView
     private lateinit var procStepText: TextView
     private lateinit var procProgressBar: ProgressBar
-    /** 结果面板当前子页：0=结果 1=过程 */
+    /** Current subpage of the result panel: 0=result 1=process */
     private var resultPage = 0
-    /** 预览节流：上一帧还没画完就丢帧 */
+    /** Preview throttle: drop a frame while the previous one is still drawing */
     @Volatile private var previewBusy = false
 
-    // ---- 模式：文生图 / 图生图 ----
+    // ---- Mode: text-to-image / img2img ----
     private lateinit var tabT2i: TextView
     private lateinit var tabI2i: TextView
     private lateinit var t2iContent: LinearLayout
     private lateinit var i2iContent: LinearLayout
 
-    /** 当前参数页模式：0=文生图 1=图生图 2=Tagger */
+    /** Current params page mode: 0=text-to-image 1=img2img 2=Tagger */
     private var mode = 0
 
-    // ---- 图生图专属控件 ----
+    // ---- img2img-only views ----
     private lateinit var i2iPromptEdit: EditText
     private lateinit var i2iNegEdit: EditText
     private lateinit var i2iWidthEdit: EditText
@@ -447,10 +447,10 @@ class DrawPage(
     private lateinit var i2iPickBtn: Button
     private lateinit var i2iImgHint: TextView
 
-    /** 图生图选中的参考图（仅内存，进程结束即失效） */
+    /** Reference image picked for img2img (memory only; gone when the process ends) */
     private var i2iBitmap: Bitmap? = null
 
-    // ---- Tagger 专属控件 ----
+    // ---- Tagger-only views ----
     private lateinit var tabTagger: TextView
     private lateinit var taggerContent: LinearLayout
     private lateinit var taggerPreview: ImageView
@@ -463,24 +463,24 @@ class DrawPage(
     private lateinit var taggerTopKEdit: EditText
     private lateinit var taggerChanSpinner: android.widget.Spinner
 
-    /** 参数 / 结果两个面板的 ScrollView（跳转后用来回到顶部） */
+    /** ScrollViews of the params / result panes (used to jump back to the top) */
     private lateinit var paramScroll: ScrollView
     private lateinit var resultScroll: ScrollView
     private lateinit var taggerOut: TextView
     private lateinit var taggerSendT2iBtn: Button
     private lateinit var taggerSendI2iBtn: Button
 
-    /** Tagger 选中的输入图（仅内存） */
+    /** Input image picked for Tagger (memory only) */
     private var taggerBitmap: Bitmap? = null
 
-    /** 最近一次打标结果（逗号分隔的 tag 文本） */
+    /** Latest tagger result (comma-separated tag text) */
     private var taggerTags: String = ""
 
-    /** 结果页的「发送至图生图 / 发送至 Tagger」按钮 */
+    /** "Send to img2img / Send to Tagger" buttons on the result page */
     private lateinit var resultToI2iBtn: Button
     private lateinit var resultToTaggerBtn: Button
 
-    /** 保存图片到相册：MainActivity 注入实现（复用它的 MediaStore 逻辑）。参数：图 + 文件名 */
+    /** Save image to gallery: implementation injected by MainActivity (reuses its MediaStore logic). Params: image + file name */
     var onSaveImage: ((Bitmap, String) -> Unit)? = null
 
     fun build(): View {
@@ -489,7 +489,7 @@ class DrawPage(
             setBackgroundColor(pal.bgAlt)
         }
 
-        // ---- 顶部菜单：参数 / 结果（点击或左右翻页都能切） ----
+        // ---- Top menu: params / result (switch by tap or swipe) ----
         val tabBar = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(pal.surface)
@@ -507,17 +507,17 @@ class DrawPage(
         tabBar.addView(tabResult, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(tabBar)
 
-        // ---- 参数面板 ----
-        // 内容容器；外面会各自包一层 ScrollView，再交给 ViewPager2 做左右翻页
+        // ---- Params panel ----
+        // Content container; each is wrapped in a ScrollView, then handed to ViewPager2 for swipe paging
         paramPane = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(c.dp(16), c.dp(10), c.dp(16), c.dp(12))
         }
-        // 文生图内容容器：下面的提示词/按钮/参数都先进这里，
-        // 再和「图生图」页面一起放进模式容器，由子标签切换。
+        // Text-to-image content container: prompt/buttons/params below all go in here first,
+        // then into the mode container together with the "img2img" page, switched by sub-tabs.
         t2iContent = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
 
-        // ---- 模型状态（模型统一在「模型」页选择并加载） ----
+        // ---- Model status (models are selected and loaded on the "Models" page) ----
         val modelCard = card()
         modelCardTitle = title(c.getString(R.string.s_164))
         modelCard.addView(modelCardTitle)
@@ -531,7 +531,7 @@ class DrawPage(
         modelCard.addView(quantText)
         paramPane.addView(modelCard)
 
-        // ---- 模式子标签：文生图 / 图生图 ----
+        // ---- Mode sub-tabs: text-to-image / img2img ----
         val modeBar = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(pal.surface)
@@ -548,7 +548,7 @@ class DrawPage(
         modeBar.addView(tabTagger, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         paramPane.addView(modeBar, c.matchWrap())
 
-        // ---- 提示词 ----
+        // ---- Prompt ----
         val promptCard = card()
         promptCard.addView(title(c.getString(R.string.s_108)))
         promptEdit = labeledEdit(c.getString(R.string.s_036), singleLine = false, minLines = 3)
@@ -558,7 +558,7 @@ class DrawPage(
         promptCard.addView(negEdit, c.matchWrap(top = 4))
         t2iContent.addView(promptCard)
 
-        // ---- 生成 / 中断（同一个按钮），放在提示词与参数之间，方便盯着进度 ----
+        // ---- Generate / cancel (same button), placed between prompt and params so progress is easy to watch ----
         genBtn = Button(c).apply {
             text = c.getString(R.string.s_098)
             setBackgroundColor(primary)
@@ -595,16 +595,16 @@ class DrawPage(
         }
         t2iContent.addView(progressBar, c.matchWrap(top = 4))
 
-        // ---- 参数 ----
+        // ---- Params ----
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
 
-        // 尺寸：预设按钮组（64→512 + Personalizado），选预设直接填宽高
+        // Size: preset button group (64→512 + Personalizado), picking a preset fills width/height directly
         widthEdit = smallNumber(loadParam(KEY_W, defOf("t2i", "w", "512")))
         heightEdit = smallNumber(loadParam(KEY_H, defOf("t2i", "h", "512")))
         paramCard.addView(sizePresetRow())
 
-        // 采样器 / 调度器
+        // Sampler / scheduler
         samplerSpinner = choiceSpinner(
             listOf(c.getString(R.string.s_169)) + SdCppEngine.Sampler.entries.map { it.label }
         )
@@ -613,7 +613,7 @@ class DrawPage(
         )
         samplerSpinner.setSelection(loadInt(KEY_SAMPLER, defOfInt("t2i", "sampler", 0)).coerceIn(0, samplerSpinner.adapter.count - 1), false)
         schedulerSpinner.setSelection(loadInt(KEY_SCHEDULER, defOfInt("t2i", "scheduler", 0)).coerceIn(0, schedulerSpinner.adapter.count - 1), false)
-        // 先恢复再挂监听，免得 setSelection 把默认值又写回去
+        // Restore first, then attach the listener, so setSelection doesn't write the default back
         samplerSpinner.onItemSelectedListener = persistSpinner(KEY_SAMPLER)
         schedulerSpinner.onItemSelectedListener = persistSpinner(KEY_SCHEDULER)
         paramCard.addView(paramRow(c.getString(R.string.s_191), samplerSpinner, c.getString(R.string.s_015)))
@@ -631,7 +631,7 @@ class DrawPage(
         paramCard.addView(paramRow(c.getString(R.string.s_013), cfgEdit, c.getString(R.string.s_178)))
         paramCard.addView(paramRow(c.getString(R.string.s_193), seedEdit, c.getString(R.string.s_008)))
 
-        // ---- LoRA 加速开关 ----
+        // ---- LoRA acceleration toggle ----
         loraCheck = CheckBox(c).apply {
             text = c.getString(R.string.s_022)
             textSize = 13f
@@ -640,7 +640,7 @@ class DrawPage(
             setPadding(0, c.dp(10), 0, 0)
             setOnCheckedChangeListener { _, checked ->
                 useLora = checked
-                // 切换 LoRA = 套用该状态的那套默认值（开/关各一套，可用「设为默认值」覆盖）
+                // Switching LoRA applies that state's default set (one per on/off, overridable via "Set as default")
                 if (checked && activeLora() == null) c.toast(c.getString(R.string.s_186), short = true)
                 if (::i2iLoraCheck.isInitialized) i2iLoraCheck.isChecked = checked
                 refreshLoraHint()
@@ -654,7 +654,7 @@ class DrawPage(
         loraScaleEdit = smallNumber(loadParam(KEY_LORA_SCALE, defOf("t2i", "loraScale", "1.0")))
         bindParam(loraScaleEdit, KEY_LORA_SCALE)
         paramCard.addView(paramRow(c.getString(R.string.s_024), loraScaleEdit, c.getString(R.string.s_037)))
-        // ---- VAE tiling：分块编解码（大图省内存）----
+        // ---- VAE tiling: tiled encode/decode (saves memory on large images) ----
         vaeTilingCheck = CheckBox(c).apply {
             text = c.getString(R.string.s_544)
             textSize = 13f
@@ -685,14 +685,14 @@ class DrawPage(
         t2iContent.addView(paramCard)
         t2iContent.addView(defaultButtonsRow("t2i"), c.matchWrap(top = 10))
 
-        // ---- 图生图页面 ----
+        // ---- img2img page ----
         i2iContent = buildI2iContent()
 
-        // ---- Tagger 页面 ----
+        // ---- Tagger page ----
         taggerContent = buildTaggerContent()
 
-        // 模式容器：用 visibility 切换，不用嵌套 ViewPager，
-        // 否则会和外层「参数/结果」的左右翻页抢手势。
+        // Mode container: switched via visibility, not a nested ViewPager,
+        // otherwise it would fight the outer "params/result" swipe paging for gestures.
         val paramHost = FrameLayout(c)
         paramHost.addView(t2iContent, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -702,13 +702,13 @@ class DrawPage(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         paramPane.addView(paramHost, c.matchWrap())
 
-        // ---- 结果面板 ----
+        // ---- Result panel ----
         resultPane = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(c.dp(16), c.dp(10), c.dp(16), c.dp(12))
         }
 
-        // ---- 结果面板内的子标签：结果 / 过程（过程页逐步刷新预览）----
+        // ---- Sub-tabs inside the result panel: result / process (process page refreshes the preview step by step) ----
         val resBar = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(pal.surface)
@@ -727,7 +727,7 @@ class DrawPage(
         processContent = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         resultPane.addView(processContent, c.matchWrap())
 
-        // 过程页：逐步刷新的预览图 + 步骤进度
+        // Process page: step-by-step preview + step progress
         val procCard = card()
         procCard.addView(title(c.getString(R.string.s_373)))
         previewImg = ImageView(c).apply {
@@ -771,7 +771,7 @@ class DrawPage(
         }
         resultCard.addView(resultInfo)
 
-        // 取消生成：出图中才出现（平时隐藏），点一下打断 native 推理
+        // Cancel generation: appears only while generating (hidden otherwise), tap interrupts native inference
         resultCancelBtn = Button(c).apply {
             text = c.getString(R.string.s_536)
             textSize = 13f
@@ -803,7 +803,7 @@ class DrawPage(
             }
         }
 
-        // 放大（2×）：用「图生图」通道把这张图当参考图重绘，构图不变、细节更细
+        // Upscale (2×): redraw this image as the reference via the "img2img" path — same composition, finer detail
         upscaleBtn = Button(c).apply {
             text = c.getString(R.string.s_524)
             textSize = 13f
@@ -814,7 +814,7 @@ class DrawPage(
         }
         resultCard.addView(upscaleBtn, c.matchWrap(top = 10))
 
-        // 放大进度：条 + 文字（只在放大过程中显示）
+        // Upscale progress: bar + text (shown only while upscaling)
         upscaleProgressText = TextView(c).apply {
             textSize = 11.5f
             setTextColor(subText)
@@ -830,7 +830,7 @@ class DrawPage(
         }
         resultCard.addView(upscaleProgressBar, c.matchWrap(top = 4))
 
-        // 放大强度：SeekBar（0.05–0.99），值实时显示在右侧
+        // Upscale strength: SeekBar (0.05–0.99), value shown live on the right
         val strengthRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         strengthRow.addView(smallLabel(c.getString(R.string.s_529)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         upscaleStrengthText = TextView(c).apply {
@@ -868,7 +868,7 @@ class DrawPage(
         })
         updateUpscaleStrengthLabel()
 
-        // 放大方式：图生图重绘（img2img）还是 sd.cpp 原生 hires fix
+        // Upscale mode: img2img redraw or sd.cpp native hires fix
         upscaleModeSpinner = choiceSpinner(
             listOf(c.getString(R.string.s_538), c.getString(R.string.s_539))
         )
@@ -880,7 +880,7 @@ class DrawPage(
             c.matchWrap(top = 10)
         )
 
-        // 原生 hires fix 的放大器（只有选了 hires nativo才有意义，先按 upscaler 列表给全）
+        // Upscaler for native hires fix (only meaningful with hires nativo selected; lists all upscalers)
         upscaleUpscalerSpinner = choiceSpinner(
             SdCppEngine.HiresUpscaler.entries.map { it.label })
         upscaleUpscalerSpinner.setSelection(
@@ -893,7 +893,7 @@ class DrawPage(
 
         resultCard.addView(saveBtn, c.matchWrap(top = 10))
 
-        // 结果图一键送去「图生图」当参考图，或送去「Tagger」当输入图
+        // One-tap send of the result image to "img2img" as reference, or to "Tagger" as input
         resultToI2iBtn = Button(c).apply {
             text = c.getString(R.string.s_225)
             textSize = 13f
@@ -917,7 +917,7 @@ class DrawPage(
         resultCard.addView(sendRow, c.matchWrap(top = 8))
         resultContent.addView(resultCard)
 
-        // ---- 生成历史（只活在内存里，App 进程结束即清空） ----
+        // ---- Generation history (memory only, cleared when the app process ends) ----
         val histCard = card()
         histCard.addView(title(c.getString(R.string.s_146)))
         histCard.addView(TextView(c).apply {
@@ -959,9 +959,9 @@ class DrawPage(
         resultContent.addView(histCard)
         refreshHistory()
 
-        // ---- 参数 / 结果：ViewPager 跟手翻页（同手机桌面） ----
-        // 用老版 ViewPager 而不是 ViewPager2：它的 PagerAdapter 原生支持直接复用
-        // 已有的 View；ViewPager2 内部是 RecyclerView，重复 attach 同一个 View 会崩。
+        // ---- Params / result: ViewPager swipe paging (like the phone home screen) ----
+        // Old ViewPager instead of ViewPager2: its PagerAdapter natively supports reusing
+        // existing Views; ViewPager2 is a RecyclerView inside and crashes when the same View is attached twice.
         pager = ViewPager(c).apply {
             paramScroll = scrollWrap(paramPane)
             resultScroll = scrollWrap(resultPane)
@@ -984,13 +984,13 @@ class DrawPage(
         return root
     }
 
-    // ================= 图生图页面 =================
+    // ================= img2img page =================
 
-    /** 构建「图生图」参数页（独立的一套控件，持久化键也独立） */
+    /** Build the "img2img" params page (its own set of views, its own persistence keys) */
     private fun buildI2iContent(): LinearLayout {
         val box = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
 
-        // ---- 参考图 ----
+        // ---- Reference image ----
         val imgCard = card()
         imgCard.addView(title(c.getString(R.string.s_209)))
         i2iPreview = ImageView(c).apply {
@@ -1018,7 +1018,7 @@ class DrawPage(
         imgCard.addView(i2iImgHint)
         box.addView(imgCard)
 
-        // ---- 提示词 ----
+        // ---- Prompt ----
         val promptCard = card()
         promptCard.addView(title(c.getString(R.string.s_108)))
         i2iPromptEdit = labeledEdit(c.getString(R.string.s_036), singleLine = false, minLines = 3)
@@ -1028,7 +1028,7 @@ class DrawPage(
         promptCard.addView(i2iNegEdit, c.matchWrap(top = 4))
         box.addView(promptCard)
 
-        // ---- 生成 / 中断 ----
+        // ---- Generate / cancel ----
         i2iGenBtn = Button(c).apply {
             text = c.getString(R.string.s_098)
             setBackgroundColor(primary)
@@ -1052,16 +1052,16 @@ class DrawPage(
         }
         box.addView(i2iProgressBar, c.matchWrap(top = 4))
 
-        // ---- 参数 ----
+        // ---- Params ----
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
 
-        // 重绘强度：越小越接近原图
+        // Redraw strength: lower = closer to the original
         i2iStrengthEdit = smallNumber(loadParam(KEY_I2I_STRENGTH, defOf("i2i", "strength", "0.75")))
         bindParam(i2iStrengthEdit, KEY_I2I_STRENGTH)
         paramCard.addView(paramRow(c.getString(R.string.s_212), i2iStrengthEdit, c.getString(R.string.s_213)))
 
-        // 尺寸：默认选图时会同步成参考图尺寸（64 倍数）
+        // Size: synced to the reference image size (multiple of 64) when picked by default
         i2iWidthEdit = smallNumber(loadParam(KEY_I2I_W, defOf("i2i", "w", "512")))
         i2iHeightEdit = smallNumber(loadParam(KEY_I2I_H, defOf("i2i", "h", "512")))
         bindParam(i2iWidthEdit, KEY_I2I_W)
@@ -1091,7 +1091,7 @@ class DrawPage(
         paramCard.addView(paramRow(c.getString(R.string.s_013), i2iCfgEdit, c.getString(R.string.s_178)))
         paramCard.addView(paramRow(c.getString(R.string.s_193), i2iSeedEdit, c.getString(R.string.s_008)))
 
-        // LoRA（与文生图共用同一个开关，两边 checkbox 相互同步）
+        // LoRA (shares the toggle with text-to-image; the two checkboxes stay in sync)
         i2iLoraCheck = CheckBox(c).apply {
             text = c.getString(R.string.s_022)
             textSize = 13f
@@ -1125,7 +1125,7 @@ class DrawPage(
         return box
     }
 
-    /** 切换参数页：0=文生图 1=图生图 2=Tagger */
+    /** Switch params page: 0=text-to-image 1=img2img 2=Tagger */
     private fun switchMode(m: Int) {
         if (!::t2iContent.isInitialized) return
         mode = m
@@ -1144,7 +1144,7 @@ class DrawPage(
         refreshModelCard()
     }
 
-    /** 模式子标签样式（比顶部页签略小） */
+    /** Mode sub-tab style (slightly smaller than the top tabs) */
     private fun modeTab(t: String) = TextView(c).apply {
         text = t
         textSize = 13f
@@ -1152,13 +1152,13 @@ class DrawPage(
         setPadding(0, c.dp(9), 0, c.dp(9))
     }
 
-    // ================= Tagger 页面 =================
+    // ================= Tagger page =================
 
-    /** 构建「Tagger」参数页：选图 → 打标 → 结果可发送到文生图/图生图 */
+    /** Build the "Tagger" params page: pick image → tag → send result to text-to-image/img2img */
     private fun buildTaggerContent(): LinearLayout {
         val box = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
 
-        // ---- 输入图 ----
+        // ---- Input image ----
         val imgCard = card()
         imgCard.addView(title(c.getString(R.string.s_209)))
         taggerPreview = ImageView(c).apply {
@@ -1186,7 +1186,7 @@ class DrawPage(
         imgCard.addView(taggerImgHint)
         box.addView(imgCard)
 
-        // ---- 参数：阈值 / 最多标签数 ----
+        // ---- Params: threshold / max tags ----
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
         taggerThresholdEdit = smallNumber(loadParam(KEY_TAG_THRESHOLD, prefs().getString("def_tag_threshold", null) ?: "0.35"))
@@ -1202,7 +1202,7 @@ class DrawPage(
         paramCard.addView(defaultButtonsRow("tag"), c.matchWrap(top = 10))
         box.addView(paramCard)
 
-        // ---- 开始打标 ----
+        // ---- Run tagger ----
         taggerRunBtn = Button(c).apply {
             text = c.getString(R.string.s_222)
             setBackgroundColor(primary)
@@ -1226,7 +1226,7 @@ class DrawPage(
         }
         box.addView(taggerProgressBar, c.matchWrap(top = 4))
 
-        // ---- 结果 ----
+        // ---- Result ----
         val outCard = card()
         outCard.addView(title(c.getString(R.string.s_223)))
         taggerOut = TextView(c).apply {
@@ -1262,7 +1262,7 @@ class DrawPage(
         return box
     }
 
-    /** 从相册给 Tagger 选输入图 */
+    /** Pick the Tagger input image from the gallery */
     private fun pickTaggerImage() {
         val i = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
             addCategory(android.content.Intent.CATEGORY_OPENABLE)
@@ -1271,7 +1271,7 @@ class DrawPage(
         act.startActivityForResult(i, REQ_TAGGER_IMAGE)
     }
 
-    /** 把某张图设为 Tagger 的输入图 */
+    /** Set an image as the Tagger input */
     private fun applyTaggerImage(bmp: Bitmap) {
         taggerBitmap = bmp
         taggerPreview.setImageBitmap(bmp)
@@ -1279,7 +1279,7 @@ class DrawPage(
         taggerImgHint.text = c.getString(R.string.v_061, bmp.width, bmp.height)
     }
 
-    /** 执行打标（IO 线程推理，回主线程更新 UI） */
+    /** Run tagging (inference on the IO thread, UI updated back on the main thread) */
     private fun runTagger() {
         val bmp = taggerBitmap
         if (bmp == null) {
@@ -1327,13 +1327,13 @@ class DrawPage(
         }
     }
 
-    /** 按需加载打标模型（模型名 / 标签表 / 后端变了就重载）；返回 null = 就绪 */
+    /** Load the tagger model on demand (reload when model name / tag table / backend changed); null = ready */
     private fun ensureTaggerLoaded(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
         val sel = TaggerSelection(model.name, csv.name, useGpu)
         if (sel.isReadyWith(currentTaggerSession())) return null
-        // 线程数走全局设置（InferConfig）——与对话 gguf、打标共用同一个值
+        // Thread count comes from the global setting (InferConfig) — shared with chat gguf and tagger
         val threads = InferConfig.threads(c)
         return TaggerEngine.load(c, model, csv, useGpu, threads)
     }
@@ -1345,8 +1345,8 @@ class DrawPage(
     }
 
     /**
-     * 手动模式：不自动加载。已加载且模型/标签表/后端都与当前选择一致时才放行，
-     * 否则提示用户到「模型」页点「加载打标模型」。
+     * Manual mode: no auto-load. Only proceeds if already loaded and the model/tag table/backend all match the current
+     * selection, otherwise tells the user to tap "Load tagger model" on the "Models" page.
      */
     private fun taggerReadyError(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
@@ -1356,7 +1356,7 @@ class DrawPage(
         return null
     }
 
-    /** 把打标结果发送到目标页（0=文生图 1=图生图），发送前弹确认 */
+    /** Send tag result to the target page (0=text-to-image 1=img2img), with a confirmation first */
     private fun sendTags(target: Int) {
         val text = taggerTags.ifBlank { taggerOut.text?.toString().orEmpty() }
         if (text.isBlank()) {
@@ -1384,7 +1384,7 @@ class DrawPage(
             .show()
     }
 
-    /** 结果图 → 图生图参考图（并切换过去） */
+    /** Result image → img2img reference (and switch there) */
     private fun sendResultToI2i() {
         val b = lastImage
         if (b == null) {
@@ -1398,7 +1398,7 @@ class DrawPage(
         c.toast(c.getString(R.string.s_239), short = true)
     }
 
-    /** 结果图 → Tagger 输入图（并切换过去） */
+    /** Result image → Tagger input (and switch there) */
     private fun sendResultToTagger() {
         val b = lastImage
         if (b == null) {
@@ -1412,7 +1412,7 @@ class DrawPage(
         c.toast(c.getString(R.string.s_240), short = true)
     }
 
-    /** 外部图片 → 图生图参考图（并切到图生图页）。供对话里的图片长按菜单调用。 */
+    /** External image → img2img reference (and switch to the img2img page). Called from the long-press menu on chat images. */
     fun sendImageToI2i(b: Bitmap) {
         applyPickedImage(b)
         switchMode(1)
@@ -1421,7 +1421,7 @@ class DrawPage(
         c.toast(c.getString(R.string.s_239), short = true)
     }
 
-    /** 外部图片 → Tagger 输入图（并切到 Tagger 页）。供对话里的图片长按菜单调用。 */
+    /** External image → Tagger input (and switch to the Tagger page). Called from the long-press menu on chat images. */
     fun sendImageToTagger(b: Bitmap) {
         applyTaggerImage(b)
         switchMode(2)
@@ -1430,33 +1430,33 @@ class DrawPage(
         c.toast(c.getString(R.string.s_240), short = true)
     }
 
-    // ---- 打标模型文件（模型页导入，这里只读） ----
+    // ---- Tagger model files (imported on the model page, read-only here) ----
 
-    /** 打标目录：filesDir/tagger */
+    /** Tagger dir: filesDir/tagger */
     private fun taggerDir(): File = taggerStore.dir()
 
-    /** 已导入的打标模型（.onnx），按名字排序 */
+    /** Imported tagger models (.onnx), sorted by name */
     fun listTaggerModels(): List<File> = taggerStore.listModels()
 
-    /** 已导入的标签表（.csv） */
+    /** Imported tag tables (.csv) */
     fun listTaggerCsvs(): List<File> = taggerStore.listCsvs()
 
-    /** 当前选中的打标模型（优先上次选择的，否则第一个） */
+    /** Currently selected tagger model (last picked first, else the first) */
     fun taggerModelFile(): File? = taggerStore.modelFile()
 
-    /** 当前选中的标签表 */
+    /** Currently selected tag table */
     fun taggerCsvFile(): File? = taggerStore.csvFile()
 
     fun currentTaggerModelName(): String? = taggerStore.currentModelName()
     fun currentTaggerCsvName(): String? = taggerStore.currentCsvName()
 
-    /** 选择打标模型（换模型就卸载旧的，下次打标时重新加载） */
+    /** Select tagger model (switching unloads the old one; reloaded on the next tag run) */
     fun selectTaggerModel(f: File) {
         taggerStore.selectModel(f)
         TaggerEngine.unload()
     }
 
-    /** 选择标签表 */
+    /** Select tag table */
     fun selectTaggerCsv(f: File) {
         taggerStore.selectCsv(f)
         TaggerEngine.unload()
@@ -1464,14 +1464,14 @@ class DrawPage(
 
     fun taggerLoaded(): Boolean = TaggerEngine.isLoaded()
 
-    /** Tagger 界面选的通道顺序（false = BGR，true = RGB）；对话页借打标看图时沿用这个设置。 */
+    /** Channel order chosen in the Tagger UI (false = BGR, true = RGB); the chat page reuses this setting when tagging to look at images. */
     fun taggerRgbOrder(): Boolean =
         ::taggerChanSpinner.isInitialized && taggerChanSpinner.selectedItemPosition == 1
 
-    /** 卸载打标模型，释放内存 */
+    /** Unload the tagger model and free memory */
     fun unloadTagger() = TaggerEngine.unload()
 
-    /** 模型页「加载打标模型」：按当前选择的模型/标签表加载，返回 null=成功 */
+    /** "Load tagger model" on the model page: loads per the current model/tag table selection; null=success */
     suspend fun loadTaggerFromUi(onStage: (String) -> Unit = {}): String? {
         val model = taggerModelFile()
         val csv = taggerCsvFile()
@@ -1480,7 +1480,7 @@ class DrawPage(
         return withContext(Dispatchers.IO) { ensureTaggerLoaded() }
     }
 
-    /** 供「模型」页展示的打标状态 */
+    /** Tagger status shown on the "Models" page */
     fun taggerSummary(): String {
         val m = taggerModelFile() ?: return c.getString(R.string.s_245)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_245)
@@ -1488,14 +1488,14 @@ class DrawPage(
         return c.getString(R.string.v_062, m.name, csv.name, n)
     }
 
-    /** 导入 ONNX 打标模型（单文件） */
+    /** Import an ONNX tagger model (single file) */
     suspend fun importTaggerModel(
         uri: Uri,
         onStage: (String) -> Unit,
         onProgress: ((Long, Long) -> Unit)? = null
     ): String? = copyToTagger(uri, ".onnx", R.string.s_246, onStage, onProgress)
 
-    /** 导入标签表 CSV（单文件） */
+    /** Import a tag table CSV (single file) */
     suspend fun importTaggerCsv(
         uri: Uri,
         onStage: (String) -> Unit,
@@ -1538,14 +1538,14 @@ class DrawPage(
                     }
                 }
             } ?: return@withContext c.getString(R.string.s_106)
-            TaggerEngine.unload() // 文件变了，下次重新加载
+            TaggerEngine.unload() // files changed, reload next time
             null
         } catch (e: Throwable) {
             c.getString(R.string.v_038, (e.message ?: e.javaClass.simpleName))
         }
     }
 
-    /** 从相册/文件选择参考图 */
+    /** Pick a reference image from the gallery/files */
     private fun pickImage() {
         val i = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
             addCategory(android.content.Intent.CATEGORY_OPENABLE)
@@ -1554,7 +1554,7 @@ class DrawPage(
         act.startActivityForResult(i, REQ_IMAGE)
     }
 
-    /** 解码选中的图片；超过 2048 像素则按比例下采样，避免 OOM */
+    /** Decode the picked image; downsample proportionally past 2048 px to avoid OOM */
     private fun decodePickedImage(uri: Uri): Bitmap? = runCatching {
         val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
         c.contentResolver.openInputStream(uri)?.use {
@@ -1569,7 +1569,7 @@ class DrawPage(
         }
     }.getOrNull()
 
-    /** 选定参考图后的处理：预览 + 同步输出尺寸 */
+    /** Handle after picking a reference image: preview + sync the output size */
     private fun applyPickedImage(bmp: Bitmap) {
         i2iBitmap = bmp
         i2iPreview.setImageBitmap(bmp)
@@ -1595,21 +1595,21 @@ class DrawPage(
 
     // ================= LoRA =================
 
-    /** LoRA 目录：filesDir/draw/lora */
+    /** LoRA dir: filesDir/draw/lora */
     private fun loraDir(): File = loraStore.loraDir()
 
-    /** 已下载的 LoRA 列表（.safetensors） */
+    /** Downloaded LoRAs (.safetensors) */
     fun listLoras(): List<File> = loraStore.list()
 
     fun hasLora(): Boolean = loraStore.hasAny()
 
-    /** 当前生效的 LoRA（优先用户选中的，其次上次选中的，最后取第一个） */
+    /** Active LoRA (the user's pick first, then last selected, then the first one) */
     fun activeLora(): File? = loraStore.active(loraFile)
 
-    /** UI 高亮用：当前生效的 LoRA 名 */
+    /** For UI highlighting: name of the active LoRA */
     fun currentLoraName(): String? = activeLora()?.name
 
-    /** 选中某个 LoRA（持久化选择） */
+    /** Select a LoRA (persisted choice) */
     fun selectLora(f: File) {
         loraFile = f
         loraStore.select(f)
@@ -1621,7 +1621,7 @@ class DrawPage(
         }
     }
 
-    /** 供「模型」页展示的 LoRA 状态 */
+    /** LoRA status shown on the "Models" page */
     fun loraSummary(): String {
         val a = activeLora() ?: return c.getString(R.string.s_117)
         val size = "%.1f".format(a.length() / 1048576.0)
@@ -1649,8 +1649,8 @@ class DrawPage(
     }
 
     /**
-     * 下载 LCM-LoRA。useMirror=true 走 hf-mirror.com（国内可用）。
-     * 返回 null 表示成功；否则为错误文案。onProgress(已下载字节, 总字节[未知为 -1])
+     * Download LCM-LoRA. useMirror=true goes through hf-mirror.com (usable from China).
+     * null means success; otherwise the error text. onProgress(bytes downloaded, total bytes [-1 if unknown])
      */
     suspend fun downloadLora(useMirror: Boolean, onProgress: (Long, Long) -> Unit): String? {
         val host = if (useMirror) "https://hf-mirror.com" else "https://huggingface.co"
@@ -1678,7 +1678,7 @@ class DrawPage(
         return err
     }
 
-    /** 通用下载：边下边写 .part，完成后改名为目标文件。返回 null = 成功。 */
+    /** Generic download: stream to .part while downloading, rename to the target when done. null = success. */
     private suspend fun downloadToFile(
         url: String,
         dest: File,
@@ -1732,12 +1732,12 @@ class DrawPage(
         }
     }
 
-    // ================= 模型集（单文件 / 多文件；由「模型」页驱动） =================
+    // ================= Model sets (single / multi file; driven by the "Models" page) =================
 
-    /** 私有目录里已有的绘图模型：新式模型集（draw/sets 下的子目录）+ 旧版散落的单文件 gguf */
+    /** Draw models already in the private dir: new-style model sets (subdirs under draw/sets) + legacy loose single gguf files */
     fun listSets(): List<ModelSet> = setStore.listSets()
 
-    /** 启动后兜底：把上次选中的模型集（或第一个）设为当前 */
+    /** Startup fallback: make the last selected model set (or the first) current */
     fun ensureActiveSet() {
         if (activeSet != null) return
         val all = listSets()
@@ -1747,7 +1747,7 @@ class DrawPage(
         selectSet(pick)
     }
 
-    /** 当前操作的模型集：优先内存里的，其次按偏好里记的 */
+    /** Model set in use: the in-memory one first, else the one recorded in prefs */
     fun activeSetOrSelected(): ModelSet? {
         ensureActiveSet()
         return activeSet
@@ -1769,7 +1769,7 @@ class DrawPage(
     }
 
     /**
-     * 把已下载的 TAESD 指到当前模型集的 "taesd" 槽位。
+     * Point the downloaded TAESD at the "taesd" slot of the current model set.
      *
      * El archivo vive en files/draw/taesd/ (fuera del set), asi que se guarda
      * la ruta absoluta — el loader de sets ya distingue entre nombre y ruta
@@ -1803,16 +1803,16 @@ class DrawPage(
         return null
     }
 
-    /** 路径 del TAESD descargado, o null si no está. */
+    /** Path del TAESD descargado, o null si no está. */
     fun taesdFile(): File? = setStore.taesdFile()
 
-    /** 只把槽位从集里摘掉，不删文件（同一个文件可能被多个槽位共用） */
+    /** Remove the slot from the set only, don't delete the file (one file may be shared by several slots) */
     fun clearSlot(key: String) {
         val s = activeSetOrSelected() ?: return
         setStore.clearSlot(s, key)
     }
 
-    /** 模型集摘要：名字 · 单/多文件 · 家族 · 文件数 · 体积 */
+    /** Model set summary: name · single/multi file · family · file count · size */
     fun setSummary(s: ModelSet): String {
         val kindLabel = c.getString(if (s.kind == KIND_SINGLE) R.string.s_345 else R.string.s_346)
         val fam = c.getString(familyLabelRes(s.family))
@@ -1820,14 +1820,14 @@ class DrawPage(
         return c.getString(R.string.s_365, s.name, "$kindLabel · $fam", s.slotCount(), size)
     }
 
-    /** 当前模型集里还没填的必填槽位（key） */
+    /** Required slots (keys) still unfilled in the current model set */
     fun slotMissingIds(s: ModelSet): List<String> =
         familySlots(s.kind, s.family).filter { it.second && s.files[it.first] == null }.map { it.first }
 
-    /** 导入一个文件到模型集。
-     *  pendingNewSet = true（用户在类型菜单里选了类型）→ 用这个主文件开一个新集；
-     *  否则（补配套文件）→ 放进当前集。
-     *  返回 null 表示成功，否则为错误文案。 */
+    /** Import a file into a model set.
+     *  pendingNewSet = true (user picked a kind from the type menu) → open a new set with this main file;
+     *  otherwise (adding a companion file) → put it into the current set.
+     *  null means success, otherwise the error text. */
     suspend fun importSetFile(
         uri: Uri,
         slotKey: String?,
@@ -1841,8 +1841,8 @@ class DrawPage(
                 return@withContext c.getString(R.string.s_368)
             }
             val key = slotKey ?: if (pendingKind == KIND_SINGLE) "model" else "diffusion"
-            // TAESD 只认 sd.cpp 读得动的两种格式；.ckpt / .pt 是 torch 系，
-            // 而且 ComfyUI 常被引用的 taesd_decoder.pth 只有解码器、本来就用不了，提前说清楚。
+            // TAESD only accepts the two formats sd.cpp can read; .ckpt / .pt are torch-family,
+            // and the often-referenced ComfyUI taesd_decoder.pth is decoder-only and unusable anyway, so say so up front.
             if (key == "taesd" && ext !in listOf("safetensors", "gguf")) {
                 return@withContext c.getString(R.string.s_445)
             }
@@ -1857,8 +1857,8 @@ class DrawPage(
                     }
                 }
                 cur.dir == null -> {
-                    // 旧版散落单文件（不是模型集）：要补配套文件就得先提升成模型集。
-                    // 主模型动辄几 GB，**不复制、不搬动**——沿用原文件，写 json 时记绝对路径引用。
+                    // Legacy loose single file (not a model set): adding companion files first requires promoting it to a set.
+                    // Main models are often several GB, **not copied, not moved** — keep the original file, store an absolute path reference in the json.
                     val dir = setStore.createSetDir(cur.name)
                     ModelSet(dir.name, cur.name, cur.kind, cur.family, dir, LinkedHashMap(cur.files)).also {
                         activeSet = it
@@ -1895,8 +1895,8 @@ class DrawPage(
                 }
             } ?: return@withContext c.getString(R.string.s_106)
 
-            // TAESD 要能用，权重里必须同时有编码器和解码器（图生图要靠编码器）。
-            // 校验不过就别登记进模型集，免得用户在「加载」时才撞上一个含糊的 native 失败。
+            // TAESD needs both encoder and decoder in the weights to work (img2img relies on the encoder).
+            // If validation fails, don't register it in the set, so the user doesn't hit a vague native failure only at "Load".
             if (key == "taesd") {
                 taesdWeightsProblem(dest)?.let { msg ->
                     runCatching { dest.delete() }
@@ -1916,11 +1916,11 @@ class DrawPage(
     }
 
     /**
-     * TAESD 权重能不能用：不能用则返回给用户看的原因，能用返回 null。
+     * Whether the TAESD weights are usable: returns the reason to show the user if not, null if usable.
      *
-     * 只校验 `.safetensors`（能读出张量名）；`.gguf` 交给 native 自己报错。
-     * 必须**编码器和解码器都在**：sd.cpp 加载 TAESD 时会同时建这两个子模块，
-     * 只有解码器的话，图生图没编码器可用，文生图也可能拿到未初始化的权重。
+     * Only validates `.safetensors` (tensor names can be read); `.gguf` is left to native to report.
+     * Both **encoder and decoder must be present**: sd.cpp builds both submodules when loading TAESD,
+     * with only a decoder, img2img has no encoder and text-to-image may get uninitialized weights.
      */
     private fun taesdWeightsProblem(f: File): String? {
         if (!f.name.endsWith(".safetensors", ignoreCase = true)) return null
@@ -1934,7 +1934,7 @@ class DrawPage(
         }
     }
 
-    /** 读 `.safetensors` 头里列出的张量名。格式：8 字节小端「头长度」+ 该长度的 JSON 头。 */
+    /** Read the tensor names listed in the `.safetensors` header. Format: 8-byte little-endian "header length" + a JSON header of that length. */
     private fun safetensorsKeys(f: File): List<String> {
         java.io.DataInputStream(java.io.BufferedInputStream(java.io.FileInputStream(f))).use { ins ->
             val head = ByteArray(8)
@@ -1949,7 +1949,7 @@ class DrawPage(
         }
     }
 
-    /** 从单文件导入本地 LoRA（.safetensors）。返回 null 表示成功。 */
+    /** Import a local LoRA from a single file (.safetensors). null = success. */
     suspend fun importLoraFile(
         uri: Uri,
         onStage: (String) -> Unit,
@@ -1994,14 +1994,14 @@ class DrawPage(
         }
     }
 
-    /** 从 content:// URI 取显示文件名 */
+    /** Get the display file name from a content:// URI */
     private fun queryDisplayName(uri: Uri): String? =
         c.contentResolver.query(uri, null, null, null, null)?.use { cur ->
             val idx = cur.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (idx >= 0 && cur.moveToFirst()) cur.getString(idx) else null
         }
 
-    /** 加载当前选中的模型集（「加载绘图模型」按钮） */
+    /** Load the currently selected model set (the "Load draw model" button) */
     suspend fun loadSelectedSet(): String? = withContext(Dispatchers.IO) {
         try {
             loadSet(activeSetOrSelected())
@@ -2015,16 +2015,16 @@ class DrawPage(
         }
     }
 
-    /** 当前模型集的主模型文件名 */
+    /** Main model file name of the current model set */
     fun currentMainName(): String? = activeSetOrSelected()?.name
 
-    /** 某个文件的量化等级（Q4_0 / Q8_0 / …），读不出来返回 null */
+    /** Quant level of a file (Q4_0 / Q8_0 / …), null if unreadable */
     fun quantOf(f: File): String? = GgufProbe.quantType(f)
 
-    /** 删除单个已复制的模型文件（旧接口，保留给兼容用） */
+    /** Delete a single copied model file (old API, kept for compatibility) */
     fun deleteModel(f: File): Boolean = runCatching { f.delete() }.getOrDefault(false)
 
-    /** 私有目录里散落的 gguf（旧版遗留；新式模型请用 listSets） */
+    /** Loose gguf files in the private dir (legacy; use listSets for new-style models) */
     fun listModels(): List<File> =
         File(c.filesDir, DIR_NAME)
             .listFiles { f -> f.isFile && f.name.endsWith(".gguf", ignoreCase = true) }
@@ -2053,7 +2053,7 @@ class DrawPage(
             statusText.post { statusText.text = c.getString(R.string.s_114) }
             return c.getString(R.string.s_114)
         }
-        // 槽位表 → sd.cpp 的路径参数
+        // Slot table → sd.cpp path params
         val slots = LinkedHashMap<String, String>()
         set.files.forEach { (k, f) -> slots[k] = f.absolutePath }
         // TAESD global: si esta descargado y el set no trae el suyo, se anade aqui.
@@ -2068,8 +2068,8 @@ class DrawPage(
             return msg
         }
 
-        // 崩溃追踪：逐步把阶段写进文件。native 段错误会直接杀死进程，
-        // 但只要事先写进了磁盘，下次启动就能看到崩在哪一步。
+        // Crash tracking: write each stage to the file as it goes. A native segfault kills the process outright,
+        // but if it already reached the disk, the next launch shows which step crashed.
         val root = File(c.filesDir, DIR_NAME)
         val stageFile = File(root, ".loadstage")
         fun stage(s: String) {
@@ -2082,7 +2082,7 @@ class DrawPage(
         stage(c.getString(R.string.v_041, (android.os.Build.SUPPORTED_ABIS.firstOrNull()), (android.os.Build.VERSION.SDK_INT), (android.os.Build.MANUFACTURER), (android.os.Build.MODEL)))
         stage(c.getString(R.string.v_042, (Runtime.getRuntime().maxMemory() / 1048576), (root.usableSpace / 1048576)))
 
-        // 分步探测：每步都先落盘，后执行
+        // Step-by-step probing: write each step to disk before running it
         stage(c.getString(R.string.s_009))
         try {
             SdCppEngine.info().let { stage("3 native OK：$it") }
@@ -2096,8 +2096,8 @@ class DrawPage(
         return try {
             if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
             sdHandle = 0L
-            // 后端：选了 GPU 且设备有 Vulkan 就用它，否则 CPU。
-            // 显式传后端名会关掉 sd.cpp 的 auto_fit，避免「选 CPU 却悄悄跑 GPU」。
+            // Backend: use GPU if selected and the device has Vulkan, else CPU.
+            // Passing the backend name explicitly turns off sd.cpp's auto_fit, so "CPU selected" never silently runs on GPU.
             val gpuAllowed = GpuSupport.gpuAllowed(prefs())
             val gpuDev = if (useGpu && gpuAllowed) SdCppEngine.vulkanDevice() else null
             if (useGpu && !gpuAllowed) {
@@ -2115,13 +2115,13 @@ class DrawPage(
                 flashAttn = flashAttn,
                 backend = b,
                 slots = SdCppEngine.buildSlots(slots),
-                // 权重按阶段装载：每次只把当前阶段要的组件拉进 RAM
+                // Weights loaded in stages: only the components the current stage needs are pulled into RAM
                 diskWeights = DrawMemoryMode.useDiskWeights(c),
             )
             var used = gpuDev ?: "CPU"
             var h = createWith(used)
             if (h == 0L && used != "CPU") {
-                // Vulkan 初始化失败（驱动/显存）→ 退回 CPU，别让用户因此用不了绘图
+                // Vulkan init failed (driver/VRAM) → fall back to CPU, so the user isn't blocked from drawing
                 stage("4b vulkan init failed -> CPU")
                 used = "CPU"
                 h = createWith(used)
@@ -2137,7 +2137,7 @@ class DrawPage(
             sdHandle = h
             mainModel = set.mainFile()
             vaeModel = set.files["vae"]
-            // 登记到进程级单例：API 的绘图接口要复用同一个句柄（界面重建/换主题都不影响）
+            // Register with the process-level singleton: the API's draw endpoint reuses the same handle (UI rebuild / theme switch don't affect it)
             DrawCore.attach(h, mainModel?.name ?: set.name, used)
             stage(c.getString(R.string.s_011))
             runCatching {
@@ -2161,7 +2161,7 @@ class DrawPage(
                     }
                 }
             }
-            // 参数快照同步给 API（此时控件都已建好）
+            // Param snapshot synced to the API (all views are built by now)
             statusText.post { runCatching { syncDrawCore() } }
             runCatching { stageFile.delete() }
             onPipelineReady?.invoke()
@@ -2174,7 +2174,7 @@ class DrawPage(
     }
 
     fun unloadModel() {
-        DrawCore.release()   // 先清引用，别让 API 拿到已经 free 的句柄
+        DrawCore.release()   // clear the reference first, so the API can't get an already-freed handle
         if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
         sdHandle = 0L
         activeBackend = "CPU"
@@ -2198,14 +2198,14 @@ class DrawPage(
         else -> c.getString(R.string.s_115)
     }
 
-    /** 当前模型集里挂了 TAESD 权重就返回它（仅用于界面提示；加载时由槽位表带过去） */
+    /** Return the TAESD weights attached to the current model set (UI hint only; the slot table carries it at load time) */
     fun activeTaesd(): File? = activeSetOrSelected()?.files?.get("taesd")
 
     fun refreshStatus() {
         refreshModelCard()
     }
 
-    /** 顶部模型卡片跟随子页切换：文生图/图生图 显示绘图模型，Tagger 显示打标模型 */
+    /** Top model card follows the subpage: text-to-image/img2img show the draw model, Tagger shows the tagger model */
     private fun refreshModelCard() {
         if (!::modelCardTitle.isInitialized) return
         if (mode == 2) {
@@ -2223,8 +2223,8 @@ class DrawPage(
         }
     }
 
-    /** 当前绘图模型的量化等级（始终可见）。
-     *  量化等级是烧在模型文件里的（Q4_0 的 gguf 就是 Q4_0），App 无法凭空转换，只能读出来展示。 */
+    /** Quant level of the current draw model (always visible).
+     *  The quant level is baked into the model file (a Q4_0 gguf is Q4_0); the app can't convert it out of thin air, only read it out and show it. */
     private fun refreshQuantText() {
         try {
             val m = mainModel ?: activeSetOrSelected()?.mainFile() ?: listModels().maxByOrNull { it.length() }
@@ -2237,10 +2237,10 @@ class DrawPage(
         } catch (_: Throwable) {}
     }
 
-    // ================= 生成 =================
+    // ================= Generation =================
 
     private fun generateFromUi() {
-        persistAll()   // 生成前先把参数落盘，保证「改完就生成」也被记住
+        persistAll()   // persist params before generating, so "edit then generate" is remembered too
         if (!isReady()) {
             val msg = if (llmLoaded) c.getString(R.string.s_100)
             else c.getString(R.string.s_173)
@@ -2267,7 +2267,7 @@ class DrawPage(
         onStatus?.invoke(c.getString(R.string.s_165), false)
         val startedAt = System.currentTimeMillis()
         scope.launch {
-            // 逐秒报“已耗时”，否则底层不报中间进度，看着像卡死
+            // Report "elapsed" every second, otherwise the backend reports no intermediate progress and it looks stuck
             val ticker = launch {
                 while (true) {
                     delay(1000)
@@ -2301,12 +2301,12 @@ class DrawPage(
                 val bmp = toBitmap(img)
                 val sec = (System.currentTimeMillis() - startedAt) / 1000
                 resultImg.post {
-                    DrawHistory.add(img)          // 先进历史（内存）
+                    DrawHistory.add(img)          // into history first (memory)
                     lastImage = bmp
                     resultImg.setImageBitmap(bmp)
                     resultInfo.text = c.getString(R.string.v_051, (img.width), (img.height), (img.seed), (sec))
                     refreshHistory()
-                    switchPane(toResult = true)   // 出图后自动跳到结果页
+                    switchPane(toResult = true)   // jump to the result page automatically after generating
                 }
                 val doneTxt = c.getString(R.string.v_052, (img.width), (img.height), (img.seed), (sec))
                 progressText.post { progressText.text = doneTxt }
@@ -2468,17 +2468,17 @@ class DrawPage(
     /** Premium: batch generation button (null in free flavor). */
     private var batchBtn: Button? = null
 
-    /** 用户是否已请求中断当前生成（用于把“取消”与“真失败”区分开）。 */
+    /** Whether the user has requested cancellation of the current generation (separates "cancel" from a real failure). */
     @Volatile private var cancelRequested = false
 
     /**
-     * 放大强度：0.05（几乎原图，只补细节）→ 0.99（几乎重画）。
+     * Upscale strength: 0.05 (nearly the original, detail only) → 0.99 (nearly a redraw).
      * SeekBar progress 0..94 mapea a 0.05..0.99。
      */
     private fun currentUpscaleStrength(): Float =
         DrawParamsLogic.upscaleStrength(upscaleStrengthBar.progress)
 
-    /** VAE tiling 相关的行只在开关打开时显示 */
+    /** VAE tiling rows are shown only while the toggle is on */
     private fun refreshVaeTilingRows() {
         if (!::vaeTileSizeEdit.isInitialized) return
         val on = vaeTilingCheck.isChecked
@@ -2486,7 +2486,7 @@ class DrawPage(
         vaeTileOverlapEdit.parent?.let { (it as? View)?.visibility = if (on) View.VISIBLE else View.GONE }
     }
 
-    /** 读 VAE tiling 的配置（关掉时返回 null，让引擎走整帧解码） */
+    /** Read the VAE tiling config (null when off, so the engine does full-frame decode) */
     private fun vaeTilingParams(): Triple<Boolean, Int, Float>? {
         if (!::vaeTilingCheck.isInitialized || !vaeTilingCheck.isChecked) return null
         val size = DrawParamsLogic.vaeTileSize(vaeTileSizeEdit.text.toString())
@@ -2494,7 +2494,7 @@ class DrawPage(
         return Triple(true, size, overlap)
     }
 
-    /** 刷新「放大强度」旁边的实时数值 */
+    /** Refresh the live value next to "upscale strength" */
     private fun updateUpscaleStrengthLabel() {
         if (!::upscaleStrengthText.isInitialized || !::upscaleStrengthBar.isInitialized) return
         val v = currentUpscaleStrength()
@@ -2503,11 +2503,11 @@ class DrawPage(
     }
 
     /**
-     * 放大最后一张图（2×）。
+     * Upscale the last image (2×).
      *
-     * 走「图生图」通道：把当前结果当参考图（initImage）以 2× 尺寸重绘，
-     * strength（可调，默认 0.35）决定重绘幅度 —— 越小越贴原图、只补细节。
-     * 这比「同种子重新抽卡」稳得多：同种子换分辨率并不保证同一张脸。
+     * Goes through the "img2img" path: redraw the current result as the reference image (initImage) at 2× size,
+     * strength (adjustable, default 0.35) sets how much is redrawn — smaller hugs the original, detail only.
+     * Much more stable than "same-seed re-roll": the same seed at a different resolution doesn't guarantee the same face.
      */
     private fun upscaleLast() {
         val src = lastImage
@@ -2534,7 +2534,7 @@ class DrawPage(
         totalStep = 0
         progressBar.progress = 0
         progressBar.visibility = View.VISIBLE
-        // 放大专用进度条（结果页那条），跟进度文字一起显示
+        // Dedicated upscale progress bar (the one on the result page), shown with the progress text
         if (::upscaleProgressBar.isInitialized) {
             upscaleProgressBar.progress = 0
             upscaleProgressBar.visibility = View.VISIBLE
@@ -2545,16 +2545,16 @@ class DrawPage(
         }
         onStatus?.invoke(c.getString(R.string.s_525), false)
 
-        // 2× 尺寸，夹到 2048（sd.cpp 上限）；步数用当前值，img2img 步数少但要够
+        // 2× size, clamped to 2048 (sd.cpp limit); steps use the current value, img2img needs few but enough
         val (w, hgt) = DrawParamsLogic.upscaleTargetSize(src.width, src.height)
         val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
         val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull()?.takeIf { it >= 0 } ?: System.currentTimeMillis()
-        val strength = currentUpscaleStrength()   // 用户可调：0.05 = 几乎原图, 0.99 = 几乎重画
+        val strength = currentUpscaleStrength()   // user-adjustable: 0.05 = nearly original, 0.99 = nearly a redraw
 
-        // 放大方式：0 = 图生图重绘（原图当参考图重画），1 = sd.cpp 原生 hires fix
-        // 原生 hires fix 是另一条路：第一轮照常按原尺寸出图，再由 sd.cpp 内部把 latent
-        // 放大并做第二轮降噪 —— 构图不重随、prompt token 不额外消耗。
+        // Upscale mode: 0 = img2img redraw (redraw with the original as reference), 1 = sd.cpp native hires fix
+        // Native hires fix is a separate route: the first pass draws at the original size as usual, then sd.cpp itself
+        // upscales the latent and runs a second denoise pass — composition isn't re-rolled, no extra prompt tokens.
         val mode = if (::upscaleModeSpinner.isInitialized) upscaleModeSpinner.selectedItemPosition else 1
         val useNativeHires = mode == 1
         val upscaler = if (::upscaleUpscalerSpinner.isInitialized) {
@@ -2563,17 +2563,17 @@ class DrawPage(
         } else {
             SdCppEngine.HiresUpscaler.LATENT
         }
-        // 原生 hires：第一轮尺寸 = 原图尺寸，目标 = 2×
+        // Native hires: first-pass size = original size, target = 2×
         val firstPass = if (useNativeHires) DrawParamsLogic.hiresFirstPassSize(src.width, src.height) else null
         val firstW = firstPass?.first ?: w
         val firstH = firstPass?.second ?: hgt
-        // 原生 hires 的第二轮降噪强度直接用同一个 slider（0.05–0.99）
-        // hires 原生用的是 denoising_strength：0 = 完全保留放大后的 latent（只放大不加细节），
-        // 1 = 全部重新采样（构图会丢）。slider 的 0.05–0.99 直接传过去太极端，
-        // 所以映射到 hires 真正好用的区间 0.15–0.55：
-        //   0.15 = 几乎原图 + 轻微锐化（保守）
-        //   0.35 = 平衡（默认）
-        //   0.55 = 明显加细节（可能动构图）
+        // Native hires second-pass denoise strength uses the same slider (0.05–0.99)
+        // hires native uses denoising_strength: 0 = keep the upscaled latent fully (upscale only, no detail),
+        // 1 = resample everything (composition is lost). Passing the slider's 0.05–0.99 straight through is too extreme,
+        // so map it to the range hires actually works well in, 0.15–0.55:
+        //   0.15 = nearly original + slight sharpening (conservative)
+        //   0.35 = balanced (default)
+        //   0.55 = clearly more detail (may shift composition)
         val hiresDenoise = if (useNativeHires) {
             DrawParamsLogic.hiresDenoise(strength)
         } else 0.7f
@@ -2585,7 +2585,7 @@ class DrawPage(
                     delay(1000)
                     val sec = (System.currentTimeMillis() - startedAt) / 1000
                     progressText.post {
-                        // 放大用自己的阶段词（"Ampliando…"），别用普通生成的"Cargando modelo…"
+                        // Upscale uses its own phase word ("Ampliando…"), not the plain generation "Cargando modelo…"
                         val phase = if (sec < 8) c.getString(R.string.s_525) else c.getString(R.string.s_129)
                         val stepInfo = if (totalStep > 0) c.getString(R.string.v_049, curStep, totalStep) else ""
                         progressText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
@@ -2598,7 +2598,7 @@ class DrawPage(
                                 procProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
                             }
                         }
-                        // 放大进度条（结果页）：同源数据
+                        // Upscale progress bar (result page): same data source
                         if (::upscaleProgressBar.isInitialized) {
                             if (totalStep > 0) {
                                 upscaleProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
@@ -2622,8 +2622,8 @@ class DrawPage(
 
                 val bmp = withContext(Dispatchers.IO) {
                     if (useNativeHires) {
-                        // 原生 hires fix：不用 init_image，让 sd.cpp 自己放大 latent + 二次降噪。
-                        // 第一轮尺寸 = 原图尺寸（保持构图），目标尺寸 = 2×。
+                        // Native hires fix: no init_image, sd.cpp upscales the latent and denoises again itself.
+                        // First-pass size = original size (keeps composition), target size = 2×.
                         SdCppEngine.render(
                             handle = h,
                             prompt = prompt,
@@ -2649,7 +2649,7 @@ class DrawPage(
                             vaeTileOverlap = vaeTiling?.third ?: 0.25f,
                         )
                     } else {
-                        // 图生图重绘：原图当参考图，按 2× 尺寸重画
+                        // img2img redraw: original as reference, redraw at 2× size
                         val rgb = SdCppEngine.bitmapToRgb888(src)
                         SdCppEngine.render(
                             handle = h,
@@ -2690,7 +2690,7 @@ class DrawPage(
                 val doneTxt = c.getString(R.string.v_052, bmp.width, bmp.height, seed, sec)
                 progressText.post { progressText.text = doneTxt }
                 if (::procStepText.isInitialized) procStepText.post { procStepText.text = doneTxt }
-                // 放大完成：进度条填满再藏起来
+                // Upscale done: fill the bar, then hide it
                 if (::upscaleProgressBar.isInitialized) {
                     upscaleProgressBar.post {
                         upscaleProgressBar.progress = 100
@@ -2718,7 +2718,7 @@ class DrawPage(
             } finally {
                 setGenerating(false)
                 progressBar.post { progressBar.visibility = View.GONE }
-                // 放大出错/取消：进度条也收起来
+                // Upscale error/cancel: hide the bar too
                 if (::upscaleProgressBar.isInitialized) {
                     upscaleProgressBar.post { upscaleProgressBar.visibility = View.GONE }
                 }
@@ -2730,20 +2730,20 @@ class DrawPage(
         }
     }
 
-    /** 供对话页复用的生成入口：把输入当正面提示词，其余参数取绘图页当前设置。 */
+    /** Generation entry reused by the chat page: input is the positive prompt, other params come from the draw page's current settings. */
     suspend fun generateImage(
         prompt: String,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         onPreview: ((Int, Int, Int, ByteArray) -> Unit)? = null,
     ): ImageData {
-        // 绘图接口正在出图时别插队：同一个 native 句柄同时跑两个任务会错乱
+        // Don't jump the queue while the draw endpoint is generating: two tasks on the same native handle at once get scrambled
         if (DrawCore.busy) throw IllegalStateException(c.getString(R.string.s_428))
         val vaeTiling = vaeTilingParams()
         val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
         val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
-        // 宽高：sd.cpp 要求 64 的倍数，向下取整；夹到 64~2048 防止手滑
+        // Width/height: sd.cpp requires multiples of 64, rounded down; clamped to 64~2048 against typos
         val w = DrawParamsLogic.size(widthEdit.text.toString())
         val hgt = DrawParamsLogic.size(heightEdit.text.toString())
         onProgress(0, steps)
@@ -2753,26 +2753,26 @@ class DrawPage(
         if (h == 0L) throw IllegalStateException(c.getString(R.string.s_163))
         if (mainModel == null) throw IllegalStateException(c.getString(R.string.s_121))
 
-        // LoRA：走结构化参数（sd.cpp 原生接口，不再拼 prompt 里的 lora: 语法）
+        // LoRA: via structured params (sd.cpp native API, no more lora: syntax in the prompt)
         val lora = if (useLora) activeLora() else null
-        // EditText 必须在主线程读，先取出来再进 IO
+        // EditText must be read on the main thread; grab it first, then enter IO
         val negative = negEdit.text.toString()
 
-        // 采样器/调度器：默认「自动」——勾了 LoRA 就走 LCM（否则 LCM-LoRA 效果大打折扣），否则 Euler a + Discrete
+        // Sampler/scheduler: default "auto" — LCM when LoRA is on (otherwise LCM-LoRA loses much of its effect), else Euler a + Discrete
         val sampler = pickSampler(lora != null)
         val scheduler = pickScheduler(lora != null)
-        // LoRA 权重：0 = 不挂，1.0 是标准
+        // LoRA weight: 0 = not attached, 1.0 is standard
         val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
-        // 对话页出图不走界面的 setGenerating，这里手动上报一句：
-        // 否则 API 侧不知道界面在出图，会插进来抢同一个 native 句柄
+        // Chat-page generation doesn't go through the UI's setGenerating, so report it manually here:
+        // otherwise the API side doesn't know the UI is generating and jumps in on the same native handle
         DrawCore.uiBusy = true
         // Trial: el SIGSEGV al generar mata el proceso; el flag queda y el
         // siguiente arranque apaga el toggle GPU.
         if (activeBackend.startsWith("Vulkan")) GpuTrial.begin(prefs())
         try {
-            // 推理是同步阻塞的 native 调用（一张几百秒），绝不能跟调用方同线程——
-            // 调用方基本都在 Dispatchers.Main，否则整个 UI 会卡死到出图为止。
+            // Inference is a synchronous blocking native call (hundreds of seconds per image), so never on the caller's thread—
+            // callers are basically on Dispatchers.Main, otherwise the whole UI would freeze until the image is done.
             val bmp = withContext(Dispatchers.IO) {
                 SdCppEngine.render(
                     handle = h,
@@ -2804,37 +2804,37 @@ class DrawPage(
         }
     }
 
-    /** 采样器选择：索引 0 = 自动；其余按 SdCppEngine.Sampler 顺序 */
+    /** Sampler pick: index 0 = auto; the rest follow SdCppEngine.Sampler order */
     private fun pickSampler(hasLora: Boolean): SdCppEngine.Sampler {
         val idx = samplerSpinner.selectedItemPosition
         if (idx <= 0) return if (hasLora) SdCppEngine.Sampler.LCM else SdCppEngine.Sampler.EULER_A
         return SdCppEngine.Sampler.entries.getOrElse(idx - 1) { SdCppEngine.Sampler.EULER_A }
     }
 
-    /** 调度器选择：索引 0 = 自动 */
+    /** Scheduler pick: index 0 = auto */
     private fun pickScheduler(hasLora: Boolean): SdCppEngine.Scheduler {
         val idx = schedulerSpinner.selectedItemPosition
         if (idx <= 0) return if (hasLora) SdCppEngine.Scheduler.LCM else SdCppEngine.Scheduler.DISCRETE
         return SdCppEngine.Scheduler.entries.getOrElse(idx - 1) { SdCppEngine.Scheduler.DISCRETE }
     }
 
-    // ================= 图生图生成 =================
+    // ================= img2img generation =================
 
-    /** 图生图采样器（对应图生图页的 spinner） */
+    /** img2img sampler (the spinner on the img2img page) */
     private fun pickI2iSampler(hasLora: Boolean): SdCppEngine.Sampler {
         val idx = i2iSamplerSpinner.selectedItemPosition
         if (idx <= 0) return if (hasLora) SdCppEngine.Sampler.LCM else SdCppEngine.Sampler.EULER_A
         return SdCppEngine.Sampler.entries.getOrElse(idx - 1) { SdCppEngine.Sampler.EULER_A }
     }
 
-    /** 图生图调度器 */
+    /** img2img scheduler */
     private fun pickI2iScheduler(hasLora: Boolean): SdCppEngine.Scheduler {
         val idx = i2iSchedulerSpinner.selectedItemPosition
         if (idx <= 0) return if (hasLora) SdCppEngine.Scheduler.LCM else SdCppEngine.Scheduler.DISCRETE
         return SdCppEngine.Scheduler.entries.getOrElse(idx - 1) { SdCppEngine.Scheduler.DISCRETE }
     }
 
-    /** 点图生图页的「生成」按钮 */
+    /** The "Generate" button on the img2img page */
     private fun generateFromUiI2i() {
         persistAll()
         if (!isReady()) {
@@ -2933,7 +2933,7 @@ class DrawPage(
         }
     }
 
-    /** 图生图实际推理：把选中的参考图编码成 RGB888 传给 native，strength 控制重绘幅度 */
+    /** Actual img2img inference: encodes the picked reference image to RGB888 for native, strength controls redraw amount */
     private suspend fun generateImageI2i(
         prompt: String,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
@@ -2997,19 +2997,19 @@ class DrawPage(
 
     fun toBitmap(img: ImageData): Bitmap = img.bitmap
 
-    /** 供对话页调用：把生成过程的预览帧转给「过程」页 */
+    /** For the chat page: forwards generation preview frames to the "process" page */
     fun previewFrame(step: Int, w: Int, h: Int, rgb: ByteArray) = onPreviewFrame(step, w, h, rgb)
 
-    /** 点「中断生成」：先给个即时反馈，再请求 native 中断 */
+    /** "Cancel generation" tap: immediate feedback first, then request a native cancel */
     private fun doCancel() {
         cancel()
         progressText.text = c.getString(R.string.s_125)
     }
 
-    /** 统一切换按钮的「开始生成 / 中断生成」外观与行为 */
+    /** Uniformly switches the button's "start generation / cancel generation" look and behavior */
     private fun setGenerating(g: Boolean) {
         generating = g
-        DrawCore.uiBusy = g   // 上报给 API 侧：界面在出图，别来抢同一个句柄
+        DrawCore.uiBusy = g   // report to the API side: the UI is generating, don't grab the same handle
         genBtn.post {
             genBtn.isEnabled = true
             genBtn.text = if (g) c.getString(R.string.s_040) else c.getString(R.string.s_098)
@@ -3020,7 +3020,7 @@ class DrawPage(
             i2iGenBtn.text = if (g) c.getString(R.string.s_040) else c.getString(R.string.s_098)
             i2iGenBtn.setBackgroundColor(if (g) pal.stop else primary)
         }
-        // 结果页的「取消生成」按钮：只在出图中显示
+        // "Cancel generation" button on the result page: shown only while generating
         if (::resultCancelBtn.isInitialized) resultCancelBtn.post {
             resultCancelBtn.visibility = if (g) View.VISIBLE else View.GONE
         }
@@ -3049,22 +3049,22 @@ class DrawPage(
     }
 
     fun release() {
-        // 出图还在跑时不能 free native 句柄：sd.cpp 的 free_sd_ctx 会销毁正在使用的
-        // VAE/UNet，ggml_runner 撞上 GGML_ASSERT(!graph_active_) 直接 abort，
-        // 整个进程 native crash（SIGABRT）。交给 native 侧的延迟释放处理。
+        // Can't free the native handle while generation is still running: sd.cpp's free_sd_ctx destroys the
+        // VAE/UNet in use, ggml_runner hits GGML_ASSERT(!graph_active_) and aborts outright,
+        // native-crashing the whole process (SIGABRT). Left to native-side deferred release instead.
         if (DrawCore.uiBusy) {
-            // 让引擎自己收尾：nativeFree 会登记成 pending，推理线程退出时再真正释放。
+            // Let the engine wind down itself: nativeFree registers it as pending and really frees it when the inference thread exits.
             DrawCore.release()
             if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
             sdHandle = 0L
             return
         }
-        DrawCore.release()   // 顺序不能反：先断开 API 侧的引用，再真正释放 native 句柄
+        DrawCore.release()   // order matters: drop the API-side reference first, then really free the native handle
         if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
         sdHandle = 0L
     }
 
-    // ================= UI 小工具 =================
+    // ================= UI helpers =================
 
     private fun card() = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
@@ -3133,7 +3133,7 @@ class DrawPage(
         return wrap
     }
 
-    /** 顶部菜单的一项 */
+    /** One item of the top menu */
     private fun tabItem(t: String) = TextView(c).apply {
         text = t
         textSize = 13.5f
@@ -3141,14 +3141,14 @@ class DrawPage(
         setPadding(0, c.dp(11), 0, c.dp(11))
     }
 
-    /** 切换「参数 / 结果」面板（带动画翻页），并高亮当前项 */
+    /** Switch the "params / result" panes (animated paging) and highlight the current item */
     private fun switchPane(toResult: Boolean) {
         if (!::paramPane.isInitialized) return
         if (::pager.isInitialized) pager.setCurrentItem(if (toResult) 1 else 0, true)
         highlightTabs(toResult)
     }
 
-    /** 同步顶部菜单的高亮；手势翻页时也由它更新 */
+    /** Sync the top menu highlight; also updated from here on swipe paging */
     private fun highlightTabs(toResult: Boolean) {
         if (!::tabParams.isInitialized) return
         for ((tv, sel) in listOf(tabParams to !toResult, tabResult to toResult)) {
@@ -3158,7 +3158,7 @@ class DrawPage(
         }
     }
 
-    /** 结果面板内切换「结果 / 过程」子页 */
+    /** Switch the "result / process" subpage inside the result panel */
     private fun switchResultPage(p: Int) {
         if (!::resultContent.isInitialized) return
         resultPage = p
@@ -3171,7 +3171,7 @@ class DrawPage(
         }
     }
 
-    /** 开始生成：清掉上一张预览并切到「过程」页 */
+    /** Start generating: clear the previous preview and switch to the "process" page */
     private fun startPreview() {
         if (!::processContent.isInitialized) return
         previewBusy = false
@@ -3182,7 +3182,7 @@ class DrawPage(
         switchResultPage(1)
     }
 
-    /** 预览帧（native 推理线程回调）→ 节流后刷到「过程」页 */
+    /** Preview frame (native inference thread callback) → throttled onto the "process" page */
     private fun onPreviewFrame(step: Int, w: Int, h: Int, rgb: ByteArray) {
         if (!::previewImg.isInitialized) return
         if (previewBusy) return
@@ -3199,20 +3199,20 @@ class DrawPage(
         }
     }
 
-    /** 让某个面板回到最顶处（等布局完成后执行，避免刚切页时高度还是 0） */
+    /** Scroll a panel back to the very top (runs after layout, so the height isn't still 0 right after a page switch) */
     private fun scrollTop(s: ScrollView?) {
         s ?: return
         s.post { s.smoothScrollTo(0, 0) }
     }
 
-    /** 给面板包一层可纵向滚动的 ScrollView（翻页控件需要一个确定高度的子项） */
+    /** Wrap a panel in a vertically scrollable ScrollView (the pager needs a child with a definite height) */
     private fun scrollWrap(inner: View) = ScrollView(c).apply {
         isFillViewport = true
         addView(inner, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
-    /** ViewPager 用的最小 PagerAdapter：直接复用已建好的两个面板，不重建 */
+    /** Minimal PagerAdapter for ViewPager: reuses the two panes already built, no rebuild */
     private class PaneAdapter(private val panes: List<View>) : PagerAdapter() {
         override fun getCount() = panes.size
         override fun isViewFromObject(view: View, obj: Any) = view === obj
@@ -3227,12 +3227,12 @@ class DrawPage(
         }
     }
 
-    /** 宽 × 高 输入行 */
+    /** Width × height input row */
     /**
-     * 尺寸预设按钮组：64/128/256/384/512 + 「Personalizado」。
+     * Size preset button group: 64/128/256/384/512 + "Personalizado".
      *
-     * 选预设 → 直接把 width/height 填好；选 Personalizado → 显示自定义输入行。
-     * 用户手改宽高后自动切回「Personalizado」（避免按钮状态和实际值对不上）。
+     * Pick a preset → width/height are filled directly; pick Personalizado → the custom input row appears.
+     * Editing width/height by hand switches back to "Personalizado" (so the button state can't disagree with the actual values).
      */
     private fun sizePresetRow(): View {
         val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
@@ -3261,7 +3261,7 @@ class DrawPage(
                 marginEnd = c.dp(2)
             })
         }
-        // 「Personalizado」按钮：放进同一行，权重稍大（文字更长）
+        // "Personalizado" button: in the same row, slightly larger weight (longer text)
         val customBtn = android.widget.Button(c).apply {
             text = c.getString(R.string.s_533)
             textSize = 11f
@@ -3270,14 +3270,14 @@ class DrawPage(
             setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
             setOnClickListener { applySizePreset(-1) }
         }
-        // 放最后，方便 applySizePreset 用 index == -1 表示「自定义」并统一高亮
+        // Added last, so applySizePreset can use index == -1 for "custom" and highlight it uniformly
         sizePresetButtons.add(customBtn)
         row.addView(customBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.4f).apply {
             marginStart = c.dp(4)
         })
         wrap.addView(row, c.matchWrap(top = 4))
 
-        // 自定义宽高输入行（默认隐藏，选「Personalizado」才出现）
+        // Custom width/height input row (hidden by default, appears only when "Personalizado" is picked)
         val customRow = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         customRow.addView(smallLabel(c.getString(R.string.s_534)))
         val fields = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
@@ -3300,13 +3300,13 @@ class DrawPage(
         customSizeRow = customRow
         wrap.addView(customRow, c.matchWrap(top = 6))
 
-        // 初始状态：按当前宽高判断落在哪个预设上
+        // Initial state: work out which preset the current width/height falls on
         val cur = widthEdit.text.toString().toIntOrNull()
         val idx = presets.indexOf(cur).takeIf { it >= 0 && heightEdit.text.toString().toIntOrNull() == cur }
         applySizePreset(idx ?: -1, updateFields = false)
 
-        // 用户手改宽高 → 自动切到「Personalizado」，并显示输入行
-        // （否则按钮高亮和实际值会对不上，误导用户）
+        // User edits width/height by hand → switch to "Personalizado" automatically and show the input row
+        // (otherwise the button highlight and the actual values would disagree, misleading the user)
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -3326,7 +3326,7 @@ class DrawPage(
         return wrap
     }
 
-    /** 高亮选中的预设按钮，并显示/隐藏自定义输入行 */
+    /** Highlight the selected preset button and show/hide the custom input row */
     private fun applySizePreset(index: Int, updateFields: Boolean = true) {
         if (updateFields && index >= 0) {
             val px = SIZE_PRESETS.getOrNull(index) ?: return
@@ -3337,7 +3337,7 @@ class DrawPage(
         }
         selectedSizePreset = if (index >= 0) index else null
         sizePresetButtons.forEachIndexed { i, b ->
-            // 最后一个是「Personalizado」：index == -1 时高亮它
+            // The last one is "Personalizado": highlight it when index == -1
             val isCustom = i == sizePresetButtons.size - 1
             val on = if (isCustom) index == -1 else i == index
             b.setBackgroundColor(if (on) pal.primary else pal.fieldBg)
@@ -3372,7 +3372,7 @@ class DrawPage(
         adapter = android.widget.ArrayAdapter(c, android.R.layout.simple_spinner_dropdown_item, items)
     }
 
-    // ---- 参数持久化（提示词不保存，每次重来） ----
+    // ---- Param persistence (prompt not saved, starts over each time) ----
 
     private fun prefs() = c.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -3381,8 +3381,8 @@ class DrawPage(
     private fun loadInt(key: String, def: Int): Int = prefs().getInt(key, def)
 
     /**
-     * 参数改动即时落盘。绑定时机在 setText(初值) 之后，
-     * 所以初始化不会把恢复出来的值又写一遍。
+     * Param edits are persisted immediately. Binding happens after setText(initial value),
+     * so init doesn't write the restored value back.
      */
     private fun bindParam(edit: EditText, key: String) {
         edit.addTextChangedListener(object : android.text.TextWatcher {
@@ -3396,8 +3396,8 @@ class DrawPage(
     }
 
     /**
-     * 把当前所有参数写盘 —— 由 MainActivity.onPause() 与「开始生成」兜底调用。
-     * 不能只靠输入框的 TextWatcher：切 tab、直接杀进程等场景可能漏掉。
+     * Write all current params to disk — called as a safety net by MainActivity.onPause() and "Start generation".
+     * Can't rely on the input fields' TextWatcher alone: tab switches, outright process kills etc. may skip it.
      */
     fun persistAll() {
         if (!::stepsEdit.isInitialized) return
@@ -3432,10 +3432,10 @@ class DrawPage(
             e.putInt(KEY_TAG_CHAN, taggerChanSpinner.selectedItemPosition)
         }
         e.apply()
-        syncDrawCore()   // 参数一改就同步给 API 侧（下一次请求即生效）
+        syncDrawCore()   // sync to the API side whenever a param changes (takes effect on the next request)
     }
 
-    /** Spinner 选择落盘 */
+    /** Persist Spinner selection */
     private fun persistSpinner(key: String) = object : android.widget.AdapterView.OnItemSelectedListener {
         override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) {
             prefs().edit().putInt(key, pos).apply()
@@ -3443,22 +3443,22 @@ class DrawPage(
         override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
     }
 
-    // ---- 默认值（文生图 / 图生图按 LoRA 开/关各一套；Tagger 不分） ----
+    // ---- Defaults (text-to-image / img2img get one set per LoRA on/off; Tagger is not split) ----
 
-    /** 当前 LoRA 状态（0=关 1=开），作默认值键后缀 */
+    /** Current LoRA state (0=off 1=on), used as the defaults key suffix */
     private fun loraTag(): String = if (useLora) "1" else "0"
 
     private fun builtinSteps(): String = if (useLora) "6" else "20"
     private fun builtinCfg(): String = if (useLora) "1.8" else "7.0"
 
-    /** 取某页参数的默认值：优先用户保存的默认，否则用内置 */
+    /** Get a page's param defaults: the user-saved default first, otherwise built-in */
     private fun defOf(page: String, name: String, builtin: String): String =
         prefs().getString("def_${page}_${name}_${loraTag()}", null) ?: builtin
 
     private fun defOfInt(page: String, name: String, builtin: Int): Int =
         prefs().getInt("def_${page}_${name}_${loraTag()}", builtin)
 
-    /** 把当前页当前参数存为该页（当前 LoRA 状态）的默认值 */
+    /** Store the current params of the current page as that page's defaults (for the current LoRA state) */
     fun saveDefaults(page: String) {
         val lg = loraTag()
         val e = prefs().edit()
@@ -3487,7 +3487,7 @@ class DrawPage(
         c.toast(c.getString(R.string.s_250), short = true)
     }
 
-    /** 把默认值套用到指定页（当前 LoRA 状态） */
+    /** Apply the defaults to the given page (current LoRA state) */
     fun applyDefaults(page: String) {
         when (page) {
             "t2i" -> {
@@ -3519,7 +3519,7 @@ class DrawPage(
         }
     }
 
-    /** 参数卡底部的「设为默认值 / 恢复默认」一行（点击后需确认） */
+    /** "Set as default / restore default" row at the bottom of the params card (needs confirmation) */
     private fun defaultButtonsRow(page: String): LinearLayout {
         val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         row.addView(ghostButton(c.getString(R.string.s_248)) { confirmDefaults(page, true) },
@@ -3530,7 +3530,7 @@ class DrawPage(
         return row
     }
 
-    /** 点击后先弹确认框，确认才真正生效（save=true 存为默认，false 恢复默认） */
+    /** Shows a confirmation dialog first, only applies on confirm (save=true stores as default, false restores) */
     private fun confirmDefaults(page: String, save: Boolean) {
         val pageName = c.getString(when (page) {
             "t2i" -> R.string.s_207
@@ -3555,19 +3555,19 @@ class DrawPage(
         setOnClickListener { onClick() }
     }
 
-    /** 结果图保存用的文件名 */
+    /** File name used to save the result image */
     private fun saveName(): String = "ponko_${System.currentTimeMillis()}.png"
 
-    // ---- 生成历史（只活在内存里，进程结束即清空） ----
+    // ---- Generation history (memory only, cleared when the process ends) ----
 
-    /** 点缩略图：把大图切到这一张 */
+    /** Thumbnail tap: switch the big image to this one */
     private fun showHistoryImage(img: ImageData) {
         lastImage = img.bitmap
         resultImg.setImageBitmap(img.bitmap)
         resultInfo.text = "${img.width}×${img.height} · seed ${img.seed}"
     }
 
-    /** 重建缩略图列表 */
+    /** Rebuild the thumbnail list */
     private fun refreshHistory() {
         if (!::historyRow.isInitialized) return
         val items = DrawHistory.list()
@@ -3594,23 +3594,23 @@ class DrawPage(
 }
 
 
-/** 生成结果：Bitmap + 尺寸 + 实际使用的种子 */
+/** Generation result: Bitmap + size + seed actually used */
 class ImageData(val bitmap: Bitmap, val seed: Long) {
     val width: Int get() = bitmap.width
     val height: Int get() = bitmap.height
 }
 
 /**
- * 绘图结果历史 —— 纯内存，App 进程结束即清空（用户要求「保留至程序被杀」）。
- * 放在 object 里而不是 DrawPage 字段里，这样 Activity 重建（旋转屏幕、
- * 内存回收后恢复）也能看到同一份历史。
+ * Draw result history — memory only, cleared when the app process ends (user asked to "keep until the program is killed").
+ * Kept in an object rather than a DrawPage field, so an Activity rebuild (screen rotation,
+ * restore after memory reclaim) still sees the same history.
  */
 object DrawHistory {
-    /** 最多留这么多张，防止一直生成把内存撑爆（512×512 一张约 1MB） */
+    /** Keep at most this many images, so endless generation doesn't blow up memory (a 512×512 one is ~1MB) */
     private const val MAX = 30
     private val items = mutableListOf<ImageData>()
 
-    /** 新的排在最前 */
+    /** Newest first */
     fun add(img: ImageData) {
         items.add(0, img)
         while (items.size > MAX) items.removeAt(items.size - 1)

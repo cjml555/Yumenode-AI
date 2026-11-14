@@ -32,7 +32,7 @@ interface InputBarHost {
 
 /**
  * Barra de entrada del chat: interruptor "pensar", tira de vista previa de
- * adjuntos, campo de texto, botón ＋ (adjuntar) y botón ↑ (enviar / detener).
+ * attachments, text field, "+" (attach) button and up-arrow (send / stop) button.
  *
  * Extraída de MainActivity (buildInputBar) para que ese archivo siga
  * reduciéndose. La barra es dueña de sus seis vistas; MainActivity las
@@ -62,7 +62,7 @@ class ChatInputBar(private val host: InputBarHost) {
     /** Campo de texto del mensaje. */
     lateinit var inputEdit: EditText
         private set
-    /** Botón ＋ (adjuntar). */
+    /** "+" (attach) button */
     lateinit var attachButton: TextView
         private set
     /** Botón ↑ (enviar) / ■ (detener). */
@@ -90,7 +90,7 @@ class ChatInputBar(private val host: InputBarHost) {
         }
         bar.addView(thinkCheck, ctx.matchWrap())
 
-        // 待发送图片预览条（横向可滚动，每张一个小缩略图 + 右上角 ×）
+        // Pending image preview strip (horizontal scrollable; each has a small thumbnail + top-right ×)
         attachPreviewStrip = HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
             visibility = View.GONE
@@ -103,7 +103,7 @@ class ChatInputBar(private val host: InputBarHost) {
         attachPreviewStrip.addView(attachPreviewBox)
         bar.addView(attachPreviewStrip, ctx.matchWrap())
 
-        // 预览条的重建逻辑在 AttachmentHandler（增删附件后自动刷新）
+        // Preview strip rebuild logic is in AttachmentHandler (attachment add/delete auto-refreshes)
         host.attachPreviewViews(attachPreviewStrip, attachPreviewBox)
 
         val row = LinearLayout(ctx).apply {

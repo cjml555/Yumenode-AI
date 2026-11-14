@@ -16,30 +16,35 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 /**
- * API 服务：把手机上的本地模型开放成 **OpenAI 兼容**接口，App 退到后台、锁屏后继续响应请求。
+ * API service: exposes local models on the phone as an **OpenAI-compatible** interface,
+ * keeps responding after the app goes to background or the screen is locked.
  *
- * **对话与绘图是两套互相独立的东西**，本服务同时托管它们：
+ * **Chat and drawing are two independent things**; this service hosts both:
  *
- * | | 对话 API | 绘图 API |
+ * | | Chat API | Drawing API |
  * |---|---|---|
- * | 端口 | `apiPort`（默认 8080） | `drawApiPort`（默认 8081） |
+ * | Port | `apiPort` (default 8080) | `drawApiPort` (default 8081) |
  * | key  | `apiKey` | `drawApiKey` |
- * | 开关 | `apiEnabled` | `drawApiEnabled` |
- * | 路由 | `/v1/chat/completions` | `/v1/images/generations` |
+ * | Switch | `apiEnabled` | `drawApiEnabled` |
+ * | Route | `/v1/chat/completions` | `/v1/images/generations` |
  *
- * 各有各的端口、key、开关和统计，可以只开一个、也可以两个都开。
- * 之所以不挤在一个端口上：两者的服务对象、资源占用和安全暴露面完全不同——
- * 出图一张要几十秒且吃满 CPU、通常只该在可信网络里开，而对话接口是给人天天连的；
- * 硬绑在一起就等于不让人分开配。
+ * Each has its own port, key, switch, and stats — enable just one or both.
+ * Why not cram them onto one port: their service targets, resource usage, and security exposure
+ * are totally different — one image takes tens of seconds and maxes CPU, normally should only
+ * run in trusted networks; the chat interface is for daily connection; hard-binding them together
+ * equals denying separate configuration.
  *
- * 但**只用一个前台服务 + 一条通知**：Android 的前台服务是「保住进程不被杀」的机制，
- * 起两个只会得到两条常驻通知，还得各自处理权限与 WifiLock，没有任何收益。
- * 通知里会把在跑的地址都列出来。
+ * But **one foreground service + one notification**: Android's foreground service is the mechanism
+ * to "keep the process from being killed"; starting two only gets two persistent notifications,
+ * each handling permissions and WifiLock separately, with no benefit.
+ * The notification lists all running addresses.
  *
- * 为什么类型必须是 **specialUse**：`dataSync` / `mediaProcessing` 在 Android 15+（targetSdk 35+）
- * 有「24 小时内最多 6 小时」的超时限制，到点会被系统强制停掉——常驻服务不能用那两类。
+ * Why type must be **specialUse**: `dataSync` / `mediaProcessing` on Android 15+ (targetSdk 35+)
+ * have a "max 6 hours per 24 hours" timeout; the system forcibly stops them at that point —
+ * a persistent service can't use those two categories.
  *
- * 真正的推理在 [ChatCore] / [DrawCore]（进程级单例），所以 App 里加载好的模型这里直接能用。
+ * The real inference happens in [ChatCore] / [DrawCore] (process-level singletons),
+ * so models loaded in the app are directly available here.
  */
 class ApiService : Service() {
 
@@ -51,13 +56,13 @@ class ApiService : Service() {
         private const val NOTIF_ID = 4101
         private const val PREFS = "ponko"
 
-        // ---- 对话 API ----
+        // ---- Chat API ----
         const val KEY_ENABLED = "apiEnabled"
         const val KEY_PORT = "apiPort"
         const val KEY_TOKEN = "apiKey"
         const val DEF_PORT = 8080
 
-        // ---- 绘图 API（独立；默认端口与对话错开，免得撞车）----
+        // ---- Draw API (independent; default port offset from chat to avoid collision) ----
         const val KEY_DRAW_ENABLED = "drawApiEnabled"
         const val KEY_DRAW_PORT = "drawApiPort"
         const val KEY_DRAW_TOKEN = "drawApiKey"
@@ -68,7 +73,7 @@ class ApiService : Service() {
         @Volatile var drawRunning = false
             private set
 
-        /** 任一在跑 */
+        /** Either one running */
         val running: Boolean get() = chatRunning || drawRunning
 
         @Volatile var chatAddress: String? = null
@@ -85,11 +90,11 @@ class ApiService : Service() {
         @Volatile var drawLast: String? = null
             private set
 
-        /** 当前在跑的服务器实例（同进程，界面直接读实时统计） */
+        /** Currently running server instances (same process; UI reads live stats directly) */
         @Volatile internal var chatServer: ApiServer? = null
         @Volatile internal var drawServer: ApiServer? = null
 
-        // ---------- 按 role 取偏好的键名 / 默认值 ----------
+        // ---------- Preference keys / defaults by role ----------
 
         fun keyEnabled(role: ApiServer.Role) =
             if (role == ApiServer.Role.CHAT) KEY_ENABLED else KEY_DRAW_ENABLED
@@ -109,7 +114,7 @@ class ApiService : Service() {
         fun addressOf(role: ApiServer.Role): String? =
             if (role == ApiServer.Role.CHAT) chatAddress else drawAddress
 
-        /** 拉一次实时统计：请求数 + 最近一条 */
+        /** Pulls live stats once: request count + most recent one */
         fun statsSnapshot(role: ApiServer.Role): Pair<Int, String?> {
             publish()
             return if (role == ApiServer.Role.CHAT) chatServed to chatLast else drawServed to drawLast
@@ -136,10 +141,11 @@ class ApiService : Service() {
         }
 
         /**
-         * 界面改完开关 / 端口 / key 后调用：按当前偏好把两个服务器的启停对齐。
+         * Called by the UI after changing switch / port / key: aligns start/stop of both servers
+         * per current preference.
          *
-         * 端口或 key 变了会**自动重启那一个**（而不是让用户自己记得重启），
-         * 这样「改了端口立刻就生效」，少一个坑。
+         * If port or key changed, **auto-restarts that one** (instead of making the user remember
+         * to restart), so "change port takes effect immediately" — one fewer pitfall.
          */
         fun sync(ctx: Context) {
             val i = Intent(ctx, ApiService::class.java).setAction(ACTION_START)
@@ -160,7 +166,7 @@ class ApiService : Service() {
         const val BROADCAST_START = "com.yumenode.ai.API_START"
         const val BROADCAST_STOP = "com.yumenode.ai.API_STOP"
 
-        /** 本机在局域网里的 IPv4（拿不到就返回 127.0.0.1） */
+        /** Local IPv4 in LAN (returns 127.0.0.1 if unavailable) */
         fun localIp(): String = try {
             NetworkInterface.getNetworkInterfaces().toList()
                 .filter { it.isUp && !it.isLoopback }
@@ -176,8 +182,8 @@ class ApiService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 前台服务必须尽快 startForeground（可能是被 startForegroundService 拉起的），
-        // 所以先转前台、再去对齐服务器
+        // Foreground service must call startForeground ASAP (may have been started via startForegroundService),
+        // so go foreground first, then align servers
         ensureChannel()
         goForeground()
         when (intent?.action) {
@@ -189,7 +195,7 @@ class ApiService : Service() {
             else -> {
                 reconcile()
                 if (!running) {
-                    // 一个都不需要跑 → 收摊（顺带把通知撤掉）
+                    // Nothing needs running → shut down (also removes the notification)
                     shutdownAll()
                     stopSelf()
                     return START_NOT_STICKY
@@ -225,7 +231,7 @@ class ApiService : Service() {
         }
     }
 
-    // ==================== 启停对齐 ====================
+    // ==================== Start/stop alignment ====================
 
     private fun reconcile() {
         reconcileOne(ApiServer.Role.CHAT)
@@ -238,10 +244,10 @@ class ApiService : Service() {
         val key = prefs().getString(keyToken(role), null)?.takeIf { it.isNotBlank() }
         val existing = serverOf(role)
 
-        // 已按当前配置在跑 → 不动
+        // Already running per current config — leave it
         if (enabled && existing != null && existing.port == port && existing.apiKey == key) return
 
-        // 配置变了或要关闭 → 先停掉旧实例
+        // Config changed or shutting down — stop old instance first
         if (existing != null) {
             publish()
             existing.stop()
@@ -259,7 +265,7 @@ class ApiService : Service() {
             setRunning(role, true)
             setAddress(role, "http://${localIp()}:$port")
         } else {
-            // 端口被占用之类：保持"未运行"，界面会显示成未运行、日志里有原因
+            // Port occupied etc.: keep "not running"; UI shows not running, reason in logs
             setServer(role, null)
             setRunning(role, false)
             setAddress(role, null)
@@ -283,7 +289,7 @@ class ApiService : Service() {
         }
     }
 
-    // ==================== 通知 ====================
+    // ==================== Notification ====================
 
     private fun nm(): NotificationManager =
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -301,17 +307,17 @@ class ApiService : Service() {
         nm().createNotificationChannel(ch)
     }
 
-    /** 通知正文：把在跑的地址都列出来；一个都没起来就说「启动中」或「启动失败」 */
+    /** Notification body: lists running addresses; if none started, says "starting" or "start failed" */
     private fun notificationText(): String {
         val parts = ArrayList<String>()
         if (chatRunning) parts.add(getString(R.string.s_431, chatAddress ?: ""))
         if (drawRunning) parts.add(getString(R.string.s_432, drawAddress ?: ""))
-        // 有哪一个「开着却没起来」（端口被占用等）→ 补一句，否则用户只能看到少了一行
+        // If one "enabled but not started" (port occupied etc.) → add a line; otherwise the user only sees a missing line
         val failed = listOf(ApiServer.Role.CHAT, ApiServer.Role.DRAW).count {
             prefs().getBoolean(keyEnabled(it), false) && !isRunning(it)
         }
         if (parts.isEmpty()) {
-            // 一个都没起来：要么还在起，要么全失败了——不能让用户对着「正在启动…」干等
+            // None started: either still starting, or all failed — can't make the user wait around on "starting…"
             return if (failed > 0) getString(R.string.s_435) else getString(R.string.s_434)
         }
         val txt = parts.joinToString("  ·  ")
@@ -348,7 +354,7 @@ class ApiService : Service() {
         }
     }
 
-    /** 刷新通知内容（状态变化时调用） */
+    /** Refresh notification content (called on state change) */
     fun refreshNotification() {
         runCatching { nm().notify(NOTIF_ID, buildNotification()) }
     }

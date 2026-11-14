@@ -22,49 +22,52 @@ import net.ladenthin.llama.parameters.InferenceParameters
 import net.ladenthin.llama.value.Pair as LlamaPair
 
 /**
- * 对话引擎的**共享入口**：App 界面与「对话 API」服务都从这里拿模型、跑生成。
+ * Shared entry point for the chat engine: both the app UI and the "chat API" service obtain models
+ * and run generation from here.
  *
- * 为什么要有这一层：模型原本是 MainActivity 的私有字段，activity 一销毁就被 close；
- * 而 API 服务要在 App 退到后台后继续服务，所以模型必须挂在进程级单例上。
- * MainActivity 加载/卸载模型时只是把引用登记进来（[attachLiteRt] / [attachGguf] / [release]），
- * 其他（视图重建、主题切换）都不影响这里。
+ * Why this layer: the model was originally a MainActivity private field; Activity destruction closes it;
+ * but the API service needs to keep serving after the app goes to background, so the model must live
+ * on a process-level singleton. MainActivity just registers the reference ([attachLiteRt] / [attachGguf] /
+ * [release]), while view rebuilds or theme switches don't affect it here.
  *
- * 串行化：本地模型一次只能跑一个请求（llama.cpp 的 KV slot、LiteRT 的会话都不是线程安全的），
- * 所有生成走 [lock]，并且对外暴露 [busy]，让界面和 API 互相避让。
+ * Serialization: the local model can only run one request at a time (llama.cpp's KV slot and LiteRT's
+ * conversation are not thread-safe); all generation goes through [lock], exposes [busy], and UI and API
+ * avoid each other.
  */
 object ChatCore {
 
-    /** OpenAI 风格的一条消息（role: system / user / assistant） */
+    /** OpenAI-style single message (role: system / user / assistant) */
     class Msg(val role: String, val text: String)
 
     @Volatile private var engine: Engine? = null
     @Volatile private var llama: LlamaModel? = null
 
-    /** 当前已加载的模型名（API 的 /v1/models 用它当 id） */
+    /** Currently loaded model name (API's /v1/models uses it as id) */
     @Volatile var modelName: String? = null
         private set
 
-    /** 模型是否支持图像输入（目前 API 只走纯文本，留着给以后的多模态接口用） */
+    /** Whether model supports image input (currently API text-only, kept for future multimodal interface) */
     @Volatile var visionOk = false
         private set
 
-    /** 是否正在为一个请求生成（界面据此避让，别和 API 抢同一个 KV slot） */
+    /** Whether currently generating (UI avoids accordingly, don't fight API for the same KV slot) */
     @Volatile var busy = false
         private set
 
-    /** 用户/客户端要求中断当前生成 */
+    /** User/client requested interruption of current generation */
     @Volatile private var cancelFlag = false
 
     /** Premium: GPU thread priority boost for inference (toggle en Ajustes, leído al cargar modelo). */
     @Volatile var gpuPriority: Boolean = false
         private set
 
-    /** Called by the model loader to sync the pref into the engine. */
+    /** Called by the model loader to sync the preference into the engine. */
     fun setGpuPriority(on: Boolean) { gpuPriority = on }
 
     private val lock = Mutex()
 
-    /** LiteRT 会话缓存：客户端每轮会把整段历史重发，能对上就复用会话，省掉重复 prefill */
+    /** LiteRT conversation cache: the client resends full history each round; if it matches, reuse the
+ * conversation, saving repeated prefill. */
     private class Cached(val prior: List<Msg>, val sys: String, val conv: Conversation)
     private var cache: Cached? = null
 
@@ -84,7 +87,8 @@ object ChatCore {
         visionOk = vision
     }
 
-    /** 模型被卸载（用户在界面上卸载了，或进程要退出）——只放引用，不负责 close（由持有者 close） */
+    /** Model unloaded (user unloaded in UI, or process exiting) — only drops references, does not close
+ * (owner closes). */
     fun release() {
         clearCache()
         engine = null
@@ -106,9 +110,9 @@ object ChatCore {
     }
 
     /**
-     * 生成一次。messages 为 OpenAI 风格；system 会单独抽出（LiteRT 走 systemInstruction，
-     * gguf 没有 system 角色，就并进第一条 user 消息）。
-     * 返回完整答复；流式片段同时通过 [onDelta] 回调（已经去掉思考内容）。
+     * Generate once. messages are in OpenAI style; system is extracted separately (LiteRT uses systemInstruction,
+     * gguf has no system role, so it merges into the first user message).
+     * Returns full answer; streaming fragments are passed via the [onDelta] callback (thinking content already stripped).
      */
     suspend fun generate(
         messages: List<Msg>,
@@ -132,7 +136,7 @@ object ChatCore {
         }
     }
 
-    // ==================== LiteRT-LM 路径 ====================
+    // ==================== LiteRT-LM path ====================
 
     private suspend fun runLiteRt(
         eng: Engine,
@@ -186,7 +190,7 @@ object ChatCore {
         return sb.toString()
     }
 
-    // ==================== gguf（llama.cpp）路径 ====================
+    // ==================== gguf (llama.cpp) path ====================
 
     private fun runGguf(
         lm: LlamaModel,
@@ -198,7 +202,7 @@ object ChatCore {
         val sys = messages.filter { it.role == "system" }.joinToString("\n") { it.text }.trim()
         val turns = messages.filter { it.role != "system" && it.text.isNotEmpty() }
         require(turns.isNotEmpty()) { "请求里没有 user 消息" }
-        // llama.cpp 的对话模板只认 user/assistant，system 并进第一条 user 消息
+        // llama.cpp chat template only understands user/assistant; system is merged into the first user message
         val msgs = ArrayList<LlamaPair<String, String>>()
         turns.forEachIndexed { i, m ->
             val role = if (m.role == "assistant") "assistant" else "user"
@@ -208,7 +212,7 @@ object ChatCore {
         }
         val params = InferenceParameters.empty()
             .withMessages(null, msgs)
-            // cache_prompt + 固定 slot：客户端每轮重发的历史前缀由 llama.cpp 复用，不必重复 prefill
+            // cache_prompt + fixed slot: client resends history prefix each round, llama.cpp reuses it, no repeat prefill
             .withCachePrompt(true)
             .withSlotId(0)
             .withNPredict(maxTokens ?: 1024)
@@ -219,7 +223,7 @@ object ChatCore {
             .withSeed((System.nanoTime() and 0x7FFFFFFF).toInt())
 
         val sb = StringBuilder()
-        // gguf 的思考内容混在正文流里，用和界面同款的状态机拆开，只把正文交给客户端
+        // gguf thinking content is mixed into the main stream; use the same state machine as the UI to split, only pass main text to client
         val splitter = ReasoningSplitter(
             onThought = {},
             onAnswer = { d -> if (d.isNotEmpty()) { sb.append(d); onDelta(d) } },
@@ -242,16 +246,19 @@ object ChatCore {
         return sb.toString()
     }
 
-    // ==================== 与界面共用的两个小工具 ====================
+    // ==================== Two small utilities shared with UI ====================
 
-    /** 从一条 LiteRT 消息里取出文本 */
+    /** Extracts text from one LiteRT message */
     fun messageText(m: Message): String =
         m.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
 
     /**
-     * 兼容 LiteRT 流式片段的两种语义（增量 / 累积快照），避免「您好，有什么可以帮你？」被反复拼接：
-     *   与已累积完全相同 → 丢弃；新片段以已累积开头 → 全量快照，替换；
-     *   已累积以新片段结尾 → 尾部重复，丢弃；其余 → 追加。
+     /** Compatible with LiteRT stream fragment semantics (incremental / cumulative snapshot), avoiding
+      * "Hello, how can I help you?" being repeatedly appended:
+      *   - Identical to accumulated → discard;
+      *   - New fragment starts with accumulated → full snapshot, replace;
+      *   - Accumulated ends with new fragment → tail duplicate, discard;
+      *   - Otherwise → append. */
      */
     fun mergeStream(cur: String, delta: String): String {
         if (cur.isEmpty() || delta.isEmpty()) return cur + delta

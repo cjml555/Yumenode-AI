@@ -5,19 +5,19 @@ import android.graphics.Bitmap
 import com.yumenode.ai.InferConfig
 
 /**
- * Yumenode AI 自编 stable-diffusion.cpp（GGUF）引擎。
+ * Yumenode AI self-built stable-diffusion.cpp (GGUF) engine.
  *
- * 相比 llmedge，这里能直接控制：线程数、采样器、调度器、LoRA、量化类型、取消。
+ * Compared with llmedge, this directly controls: thread count, sampler, scheduler, LoRA, quantization type, cancellation.
  */
 object SdCppEngine {
 
     init {
-        // 依赖 libc++_shared.so（jniLibs 提供）与 libyumenode_sd.so（含 sd.cpp + ggml）
+        // Depends on libc++_shared.so (provided by jniLibs) and libyumenode_sd.so (contains sd.cpp + ggml)
         System.loadLibrary("c++_shared")
         System.loadLibrary("yumenode_sd")
     }
 
-    /** 采样器（对应 sd.cpp enum sample_method_t） */
+    /** Sampler (corresponds to sd.cpp enum sample_method_t) */
     enum class Sampler(val code: Int, val label: String) {
         EULER(0, "Euler"),
         EULER_A(1, "Euler a"),
@@ -34,8 +34,8 @@ object SdCppEngine {
         EULER_CFG_PP(15, "Euler CFG++"),
         EULER_A_CFG_PP(16, "Euler a CFG++"),
 
-        // 以下 7 项 sd.cpp 早已实现（见 runtime/denoiser.hpp 的分发），此前只是 UI 没暴露。
-        // 一律追加在末尾：下拉框按声明顺序生成，旧用户偏好里存的是索引，插在中间会错位。
+        // The following 7 are already implemented in sd.cpp (see dispatch in runtime/denoiser.hpp); previously just not exposed in UI.
+        // Always append at the end: the dropdown is generated in declaration order, and old user preferences store indices — inserting in the middle would misalign them.
         RES_MULTISTEP(12, "Res Multistep"),
         RES_2S(13, "Res 2S"),
         ER_SDE(14, "ER SDE"),
@@ -45,7 +45,7 @@ object SdCppEngine {
         LMS(20, "LMS"),
     }
 
-    /** 调度器（对应 sd.cpp enum scheduler_t） */
+    /** Scheduler (corresponds to sd.cpp enum scheduler_t) */
     enum class Scheduler(val code: Int, val label: String) {
         DISCRETE(0, "Discrete"),
         KARRAS(1, "Karras"),
@@ -59,7 +59,7 @@ object SdCppEngine {
         BETA(15, "Beta"),
     }
 
-    /** 权重类型（对应 sd.cpp enum sd_type_t）；KEEP = 保持模型原样 */
+    /** Weight type (corresponds to sd.cpp enum sd_type_t); KEEP = keep the model as-is */
     const val WTYPE_KEEP = -1
     const val WTYPE_F32 = 0
     const val WTYPE_F16 = 1
@@ -73,17 +73,17 @@ object SdCppEngine {
         fun onStep(step: Int, steps: Int)
     }
 
-    /** 生成过程预览：每一步回调一张低分辨率小图（RGB888，行优先，左上原点） */
+    /** Generation preview: each step callbacks a low-res thumbnail (RGB888, row-major, top-left origin) */
     fun interface PreviewCallback {
         fun onPreview(step: Int, width: Int, height: Int, rgb: ByteArray)
     }
 
     external fun nativeInfo(): String
 
-    /** 最近一次 new_sd_ctx 的完整参数（诊断加载失败用） */
+    /** Full parameters of the most recent new_sd_ctx (for diagnosing load failures) */
     external fun nativeLastParams(): String
 
-    /** slots 长度 = SLOT_KEYS.size，元素可为 null（该槽位不填）。 */
+    /** slots length = SLOT_KEYS.size; elements may be null (that slot is not filled). */
     external fun nativeCreate(
         modelPath: String,
         vaePath: String?,
@@ -125,46 +125,46 @@ object SdCppEngine {
         vaeTileOverlap: Float,
     ): IntArray?
 
-    /** 原生 hires fix 的放大器（对应 sd.cpp 的 sd_hires_upscaler_t）。 */
+    /** Native hires fix upscaler (sd.cpp's sd_hires_upscaler_t). */
     enum class HiresUpscaler(val code: Int, val label: String) {
-        /** 潜空间放大（最省算力，sd.cpp 默认）。 */
+        /** Latent-space upscale (cheapest compute, sd.cpp default). */
         LATENT(1, "Latent"),
 
-        /** 潜空间最近邻放大。 */
+        /** Latent-space nearest-neighbor upscale. */
         LATENT_NEAREST(2, "Latent nearest"),
 
-        /** 潜空间最近邻精确放大。 */
+        /** Latent-space precise nearest-neighbor upscale. */
         LATENT_NEAREST_EXACT(3, "Latent nearest exact"),
 
-        /** 潜空间双线性 + 抗锯齿。 */
+        /** Latent-space bilinear + anti-aliased. */
         LATENT_ANTIALIASED(4, "Latent antialiased"),
 
-        /** 潜空间双三次。 */
+        /** Latent-space bicubic. */
         LATENT_BICUBIC(5, "Latent bicubic"),
 
-        /** 潜空间双三次 + 抗锯齿。 */
+        /** Latent-space bicubic + anti-aliased. */
         LATENT_BICUBIC_ANTIALIASED(6, "Latent bicubic antialiased"),
 
-        /** 像素空间 Lanczos（先解码 VAE 再放大，质量最高、最慢）。 */
+        /** Pixel-space Lanczos (decode VAE then upscale — highest quality, slowest). */
         LANCZOS(7, "Lanczos"),
 
-        /** 像素空间最近邻。 */
+        /** Pixel-space nearest-neighbor. */
         NEAREST(8, "Nearest"),
     }
 
     external fun nativeCancel(handle: Long)
 
-    /** ggml 后端设备清单：每行 "name\tdescription"（如 "Vulkan0\tAdreno (TM) 650"）。 */
+    /** ggml backend device list: each line "name\tdescription" (e.g. "Vulkan0\tAdreno (TM) 650"). */
     external fun nativeListDevices(): String
 
     external fun nativeFree(handle: Long)
 
     fun info(): String = runCatching { nativeInfo() }.getOrDefault("(n/a)")
 
-    /** 最近一次 new_sd_ctx 用的参数（多行文本） */
+    /** Parameters used by the most recent new_sd_ctx (multiline text) */
     fun lastParams(): String = runCatching { nativeLastParams() }.getOrDefault("")
 
-    /** 后端设备清单（名字 -> 描述）；取不到时返回空表。 */
+    /** Backend device list (name -> description); returns empty table if unavailable. */
     fun listDevices(): List<Pair<String, String>> =
         runCatching { nativeListDevices() }.getOrDefault("")
             .lineSequence()
@@ -176,14 +176,14 @@ object SdCppEngine {
             }
             .toList()
 
-    /** 是否有可用的 Vulkan(GPU) 设备；有则返回设备名（如 "Vulkan0"）。 */
+    /** Whether an available Vulkan (GPU) device exists; returns its name if so (e.g. "Vulkan0"). */
     fun vulkanDevice(): String? =
         listDevices().firstOrNull { it.first.contains("vulkan", true) }?.first
 
-    /** 加载模型并返回 handle；0 表示失败。
+    /** Loads model and returns handle; 0 means failure.
      *
-     *  flashAttn：CLIP 与 UNet 的 FlashAttention。实测不开会让每步慢约 28%，默认开。
-     *  backend：ggml 后端/设备名（"CPU" / "Vulkan0"）；null = 交给 sd.cpp 自动挑。
+     *  flashAttn: FlashAttention for CLIP and UNet. Measured: leaving it off slows each step by ~28%, on by default.
+     *  backend: ggml backend/device name ("CPU" / "Vulkan0"); null = let sd.cpp pick automatically.
      */
     fun create(
         modelPath: String,
@@ -197,10 +197,10 @@ object SdCppEngine {
     ): Long = nativeCreate(modelPath, vaePath, nThreads, wtype, flashAttn, backend, slots, diskWeights)
 
     /**
-     * 槽位顺序（与 JNI 里的 SlotIndex 一一对应；sd.cpp 的 sd_ctx_params_t 路径字段）。
-     * 单文件模型只用 "model"；多文件模型按家族填 diffusion / clip_l / t5xxl / llm / vae 等。
-     * "taesd" 是可选的小自编码器权重（替代 VAE 编解码，CPU 出图更快）——追加在末尾，
-     * 与 JNI 的 SlotIndex 保持同序。
+     * Slot order (corresponds one-to-one with SlotIndex in JNI; sd.cpp's sd_ctx_params_t path fields).
+     * Single-file models only use "model"; multi-file models fill diffusion / clip_l / t5xxl / llm / vae etc. by family.
+     * "taesd" is optional small VAE weights (replaces VAE encode/decode, faster CPU rendering) — appended at the end,
+     * staying in sync with JNI's SlotIndex.
      */
     val SLOT_KEYS = arrayOf(
         "model", "diffusion", "high_noise", "uncond",
@@ -208,7 +208,7 @@ object SdCppEngine {
         "llm", "llm_vision", "vae", "audio_vae", "taesd",
     )
 
-    /** 把槽位表（key -> 文件绝对路径）转成 JNI 要的定长数组 */
+    /** Converts slot table (key -> absolute path) into the fixed-size array JNI wants */
     fun buildSlots(map: Map<String, String>): Array<String?> {
         val out = arrayOfNulls<String>(SLOT_KEYS.size)
         for ((k, v) in map) {
@@ -218,10 +218,10 @@ object SdCppEngine {
         return out
     }
 
-    /** 生成一张图；失败返回 null。
+    /** Generates one image; returns null on failure.
      *
-     *  initImage 非空则会走图生图（img2img）：它会被缩放到 width×height 后作为初始 latent，
-     *  strength(<1) 决定从第几步开始去噪（越小越接近原图）。
+     *  If initImage is non-null, goes img2img: it gets resized to width×height and used as the initial latent;
+     *  strength(<1) decides from which step denoising starts (smaller = closer to original).
      */
     fun render(
         handle: Long,
@@ -242,14 +242,14 @@ object SdCppEngine {
         initWidth: Int = 0,
         initHeight: Int = 0,
         strength: Float = 1.0f,
-        // ---- 原生 hires fix（sd.cpp 内部实现）----
+        // ---- Native hires fix (implemented inside sd.cpp) ----
         hiresEnabled: Boolean = false,
         hiresTargetWidth: Int = 0,
         hiresTargetHeight: Int = 0,
         hiresSteps: Int = 0,
         hiresDenoiseStrength: Float = 0.7f,
         hiresUpscaler: HiresUpscaler = HiresUpscaler.LATENT,
-        // ---- VAE tiling（分块编解码，省内存）----
+        // ---- VAE tiling (tiled encode/decode, saves memory) ----
         vaeTilingEnabled: Boolean = false,
         vaeTileSize: Int = 512,
         vaeTileOverlap: Float = 0.25f,
@@ -276,14 +276,14 @@ object SdCppEngine {
             vaeTileOverlap,
         ) ?: return null
         if (px.isEmpty()) return null
-        // hires 时出的是目标尺寸，数组按目标尺寸排布
+        // With hires, output is target size, array laid out at target size
         val outW = if (useHires) hiresTargetWidth else width
         val outH = if (useHires) hiresTargetHeight else height
         if (px.size < outW * outH) return null
         return Bitmap.createBitmap(px, outW, outH, Bitmap.Config.ARGB_8888)
     }
 
-        /** 预览小图（RGB888）→ Bitmap（ARGB_8888）；非法输入返回 null */
+        /** Preview small image (RGB888) → Bitmap (ARGB_8888); invalid input returns null */
     fun rgbToBitmap(width: Int, height: Int, rgb: ByteArray): Bitmap? {
         if (width <= 0 || height <= 0 || rgb.size < width * height * 3) return null
         val px = IntArray(width * height)
@@ -297,8 +297,8 @@ object SdCppEngine {
     }
 
 /**
-     * Bitmap → RGB888 交错字节（每像素 3 字节，行优先，左上原点）。
-     * sd.cpp 的 init_image 就吃这个布局（见 sd_image_get_f32）。
+     * Bitmap → RGB888 interleaved bytes (3 bytes per pixel, row-major, top-left origin).
+     * sd.cpp's init_image uses this layout (see sd_image_get_f32).
      */
     fun bitmapToRgb888(bitmap: Bitmap): ByteArray {
         val w = bitmap.width

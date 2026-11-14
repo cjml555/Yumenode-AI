@@ -5,44 +5,44 @@ import android.content.Context
 import android.content.res.Configuration
 
 /**
- * 应用配色表：浅色 / 深色两套。
+ * App color palette: light / dark sets.
  *
- * 界面里所有颜色都从这里取（MainActivity 的 C_* 与 DrawPage 的 pal），
- * 所以新增控件时不要再写死色值，否则深色模式下会留下白块。
+ * All colors in the UI come from here (MainActivity's C_* and DrawPage's pal),
+ * so when adding a widget don't hardcode colors, or dark mode will leave white blocks.
  *
- * 主题模式存在 ponko 偏好里：0=跟随系统 1=浅色 2=深色（切换后 Activity 重建生效）。
+ * Theme mode is stored in the ponko pref: 0=follow system 1=light 2=dark (Activity is recreated on change).
  */
 data class YumenodeTheme(
-    val bg: Int,             // 页面/滚动区背景
-    val bgAlt: Int,          // 页面背景（略深一点的那种）
-    val surface: Int,        // 卡片、顶栏、输入栏等「白面」
-    val fieldBg: Int,        // 输入框、预览区等凹陷面
-    val softBtn: Int,        // 次级按钮 / 缩略图底
-    val softBtn2: Int,       // 次级按钮（描边款）
-    val border: Int,         // 描边
-    val chipBg: Int,         // 未选中的条目底
-    val divider: Int,        // 卡片内细分隔线（半透明）
-    val dividerLine: Int,    // 抽屉等处的实色 1px 分隔线
-    val text: Int,           // 主文字
-    val subText: Int,        // 次要文字
-    val hint: Int,           // 输入框占位
-    val primary: Int,        // 主色（按钮底 / 强调文字 / 顶栏）
-    val primarySoft: Int,    // 主色的浅底（选中态）
-    val onPrimary: Int,      // 主色上的文字
-    val thoughtBg: Int,      // 思考过程气泡底
-    val thoughtText: Int,    // 思考过程文字
+    val bg: Int,             // page / scroll area background
+    val bgAlt: Int,          // page background (slightly darker)
+    val surface: Int,        // cards, top bar, input bar etc. "white" surfaces
+    val fieldBg: Int,        // input fields, preview areas etc. recessed surfaces
+    val softBtn: Int,        // secondary buttons / thumbnail background
+    val softBtn2: Int,       // secondary buttons (outlined variant)
+    val border: Int,         // stroke / border
+    val chipBg: Int,         // background of unselected entries
+    val divider: Int,        // thin divider inside cards (semi-transparent)
+    val dividerLine: Int,    // solid 1px divider (drawer etc.)
+    val text: Int,           // main text
+    val subText: Int,        // secondary text
+    val hint: Int,           // input placeholder
+    val primary: Int,        // primary color (button bg / accent text / top bar)
+    val primarySoft: Int,    // light tint of primary (selected state)
+    val onPrimary: Int,      // text on primary
+    val thoughtBg: Int,      // thought bubble background
+    val thoughtText: Int,    // thought text
     val ok: Int,
     val warn: Int,
     val err: Int,
     val idle: Int,
-    val errText: Int,        // 错误正文（比 err 深一点）
-    val stop: Int,           // 生成中「停止」按钮
-    val mediaBg: Int,        // 图片缩略图底
-    val scrim: Int,          // 抽屉遮罩
-    val switchTrack: Int,    // 滑块开关：轨道底
-    val switchThumb: Int,    // 滑块开关：滑块
-    val statusBar: Int,      // 状态栏（顶栏同色）
-    val navBar: Int,         // 导航栏
+    val errText: Int,        // error body text (slightly darker than err)
+    val stop: Int,           // "stop" button while generating
+    val mediaBg: Int,        // image thumbnail background
+    val scrim: Int,          // drawer scrim
+    val switchTrack: Int,    // slider switch: track bg
+    val switchThumb: Int,    // slider switch: thumb
+    val statusBar: Int,      // status bar (same as top bar)
+    val navBar: Int,         // navigation bar
     val isDark: Boolean,
 ) {
     /** Aplica un acento de la [AccentPalette], recalculando los derivados. */
@@ -166,7 +166,7 @@ data class YumenodeTheme(
             navBar = 0xFF000000.toInt(),
         )
 
-        /** 主题模式：0=跟随系统 1=浅色 2=深色 3=OLED */
+        /** Theme mode: 0=follow system 1=light 2=dark 3=OLED */
         fun resolve(ctx: Context, mode: Int): YumenodeTheme = when (mode) {
             1 -> light()
             2 -> dark()

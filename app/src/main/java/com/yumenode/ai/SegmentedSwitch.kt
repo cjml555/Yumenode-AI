@@ -15,10 +15,10 @@ import android.view.View
 import kotlin.math.roundToInt
 
 /**
- * 多档滑块开关（拖拽 / 点按都行）。
+ * Multi-segment slider (drag or tap both work).
  *
- * 轨道上均分 [labels].size 个档位，滑块松手后吸附到最近一档，并回调 onChanged。
- * 外观（轨道 / 滑块 / 文字色）全部取自 [YumenodeTheme]，深浅色自动跟随。
+ * The track divides evenly into [labels].size segments; the thumb snaps to the nearest one on release and calls onChanged.
+ * Appearance (track / thumb / text color) all come from [YumenodeTheme], auto-following light/dark.
  */
 class SegmentedSwitch @JvmOverloads constructor(
     context: Context,
@@ -26,7 +26,7 @@ class SegmentedSwitch @JvmOverloads constructor(
     private val pal: YumenodeTheme = YumenodeTheme.light(),
     private var index: Int = 0,
     attr: AttributeSet? = null,
-    /** 档位变化回调（构造后可赋值）；内部换档时才触发 */
+    /** Segment change callback (assignable after construction); fires only on internal segment switches */
     var onChanged: (Int) -> Unit = {},
 ) : View(context, attr) {
 
@@ -43,7 +43,7 @@ class SegmentedSwitch @JvmOverloads constructor(
     private val innerPad = dpV(3.5f)
     private val textSize = dpV(12.5f)
 
-    /** 滑块当前连续位置（0 .. n-1） */
+    /** Current continuous slider position (0 .. n-1) */
     private var pos = index.toFloat()
     private var downRawX = 0f
     private var downPos = 0f
@@ -53,8 +53,8 @@ class SegmentedSwitch @JvmOverloads constructor(
     private var anim: ValueAnimator? = null
 
     /**
-     * 待回调的档位。吸附动画结束后才通知外部——外部（换主题）会重建整页视图，
-     * 如果在动画一开始就回调，滑块动画会被当场掐断，看起来像掉帧。
+     * Pending segment to fire. Notified only after the snap animation finishes -- external code (e.g. theme change)
+     * rebuilds the whole page, so firing early would cut the animation short and look like a dropped frame.
      */
     private var pendingNotify: Int? = null
 
@@ -70,7 +70,7 @@ class SegmentedSwitch @JvmOverloads constructor(
 
     private fun stepWidth(): Float = (width - innerPad * 2f) / labels.size.toFloat()
 
-    /** 选中档文字色：按滑块亮度取深/浅色，避免同色（如深色主题 cian sobre cian）不可见 */
+    /** Selected-segment text color: picks dark/light based on the thumb's brightness, avoiding invisible same-color combos */
     private fun onThumbText(): Int {
         val c = pal.switchThumb
         val lum = (0.299 * android.graphics.Color.red(c) + 0.587 * android.graphics.Color.green(c) +
@@ -84,12 +84,12 @@ class SegmentedSwitch @JvmOverloads constructor(
         val r = h / 2f
         val n = labels.size
 
-        // 轨道
+        // track
         trackPaint.color = pal.switchTrack
         rect.set(0f, 0f, width.toFloat(), h)
         canvas.drawRoundRect(rect, r, r, trackPaint)
 
-        // 滑块
+        // thumb
         val sw = stepWidth()
         val thumbL = innerPad + pos * sw
         thumbPaint.color = pal.switchThumb
@@ -100,7 +100,7 @@ class SegmentedSwitch @JvmOverloads constructor(
         strokePaint.strokeWidth = dpV(1f)
         canvas.drawRoundRect(rect, tr, tr, strokePaint)
 
-        // 档位文字：跟着滑块最近的档高亮
+        // segment labels: highlight whichever is nearest to the thumb
         val near = pos.roundToInt().coerceIn(0, n - 1)
         textPaint.textSize = textSize
         val baseline = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
@@ -119,7 +119,7 @@ class SegmentedSwitch @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 anim?.cancel()
-                // 上一段吸附还没播完就又开始拖：先把它的回调补发掉，别把那次选择吞了
+                // Drag started before the previous snap finished: flush its callback first so that choice is not swallowed
                 flushNotify()
                 downRawX = event.rawX
                 downRawY = event.rawY
@@ -176,7 +176,7 @@ class SegmentedSwitch @JvmOverloads constructor(
                 pos = it.animatedValue as Float
                 invalidate()
             }
-            // 动画跑完再回调：让滑块先稳稳吸附到位，外部再去做重建视图之类的重活
+            // Fire the callback after the animation completes: let the thumb settle first, then external code does the heavy lifting
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(a: Animator) = flushNotify()
             })
@@ -184,14 +184,14 @@ class SegmentedSwitch @JvmOverloads constructor(
         }
     }
 
-    /** 补发挂起的档位回调（动画结束 / 下一次触摸 / 静默设值前都会调用） */
+    /** Flush the pending segment callback (called at animation end / next touch / silent set before) */
     private fun flushNotify() {
         val t = pendingNotify ?: return
         pendingNotify = null
         onChanged(t)
     }
 
-    /** 外部直接设定档位（不触发回调） */
+    /** Set the segment directly from outside (does not fire the callback) */
     fun setIndexSilently(i: Int) {
         if (i !in labels.indices) return
         pendingNotify = null

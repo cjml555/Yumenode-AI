@@ -33,7 +33,7 @@ class ChatScrollManager(
 
     private val followThresholdPx: Int by lazy { ctx.dp(12) }
 
-    /** 「回到底部」按钮的显示阈值：离底部超过 15 行左右才出现。 */
+    /** Show the "scroll to bottom" button only when more than roughly 15 lines from the bottom */
     private val jumpThresholdPx: Int by lazy {
         val line = (16f * ctx.resources.displayMetrics.scaledDensity * 1.4f).toInt() + ctx.dp(3)
         line * 15
@@ -64,12 +64,12 @@ class ChatScrollManager(
         scrollPending = true
         scrollView.post {
             scrollPending = false
-            // 排队期间用户可能已经往上划了：再确认一次，别把他拽回去
+            // While queued, the user may have scrolled up: confirm once more, don't drag them back
             if (!force && !autoFollow) {
                 refreshFollowState()
                 return@post
             }
-            // 滚动到底不应影响输入框焦点（用户可能正在打字）
+            // Scrolling to the bottom should not steal input focus (user may be typing)
             val hadFocus = inputEdit.hasFocus()
             programmaticScroll = true
             scrollView.getChildAt(0)?.let { scrollView.scrollTo(0, it.height) }
@@ -106,8 +106,8 @@ class ChatScrollManager(
 
     /** Actualiza autoFollow y la visibilidad del botón según la posición actual. */
     private fun refreshFollowState() {
-        // 用户往上划走后就停止自动跟随（读者优先），不再把他拽回底部；
-        // 只有他自己划回到贴底附近，才恢复跟随。
+        // Stop auto-following after the user scrolls away (reader-first); no longer drag them back to the bottom;
+        // only resume when they scroll back near the bottom themselves.
         autoFollow = distanceToBottom() <= followThresholdPx
         refreshJumpButton()
     }

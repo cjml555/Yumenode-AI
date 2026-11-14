@@ -12,9 +12,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * TaggerUi — 封装「标签模型 (Tagger)」相关 UI 逻辑。
+ * TaggerUi — encapsulates UI logic for the "Tagger" (tagging) model.
  *
- * 从 MainActivity 摘出: refreshTaggerUi、refreshTaggerToggle、onTaggerToggleClick
+ * Extracted from MainActivity: refreshTaggerUi, refreshTaggerToggle, onTaggerToggleClick.
  */
 class TaggerUi(
     private val context: Context,
@@ -31,7 +31,7 @@ class TaggerUi(
     private val toast: (String) -> Unit,
 ) {
 
-    /** 刷新「标签模型」区：状态行 + 可选列表（模型 / 标签表） */
+    /** Refresh the "tagging model" section: status row + selectable list (model / tag table) */
     fun refreshTaggerUi() {
         val drawPage = getDrawPage() ?: return
         getTaggerStatusTv()?.text = drawPage.taggerSummary() ?: context.getString(R.string.s_245)
@@ -68,7 +68,7 @@ class TaggerUi(
         }
     }
 
-    /** 按当前是否已加载切换按钮文案与配色（与「对话/绘图」一致：未加载=蓝底，已加载=浅底） */
+    /** Toggle button text and color by current load state (same as chat/draw: not loaded = blue bg, loaded = light bg) */
     private fun refreshTaggerToggle() {
         val b = getTaggerLoadBtn() ?: return
         if (getDrawPage()?.taggerLoaded() == true) {
@@ -82,7 +82,7 @@ class TaggerUi(
         }
     }
 
-    /** 加载 / 卸载打标模型（多个打标模型之间切换用） */
+    /** Load / unload the tagging model (used to switch between multiple tagger models) */
     fun onTaggerToggleClick() {
         val drawPage = getDrawPage() ?: return
         if (drawPage.taggerLoaded()) {
@@ -125,7 +125,7 @@ class TaggerUi(
         selected: Boolean,
         onClick: () -> Unit,
     ): TextView = TextView(context).apply {
-        text = "▶ ${file.name}　${UiHelpers.fmtSize(file.length())}"
+        text = "▶ ${file.name} ${UiHelpers.fmtSize(file.length())}"
         textSize = 12.5f
         setTextColor(if (selected) pal.primary else pal.text)
         setPadding(context.dp(12), context.dp(8), context.dp(12), context.dp(8))

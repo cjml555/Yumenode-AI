@@ -25,18 +25,18 @@ interface ApiHost {
     /** Mostrar toast. */
     fun toast(msg: String)
 
-    /** 是否已构建模型页（两边模型名那行存在与否）。 */
+    /** Whether the Models page has been built (presence of the model-name row on both sides). */
     val modelsInitialized: Boolean
 
-    /** 对话侧 API 区块（未构建时为 null）。 */
+    /** Chat-side API block (null while not built). */
     val chatApiBlock: ApiBlockView?
 
-    /** 绘图侧 API 区块（未构建时为 null）。 */
+    /** Draw-side API block (null while not built). */
     val drawApiBlock: ApiBlockView?
 
-    /** 「对话模型：xxx」那一行。 */
+    /** The "chat model: xxx" row. */
     val chatApiModelTv: TextView
 
-    /** 「绘图模型：xxx」那一行。 */
+    /** The "draw model: xxx" row. */
     val drawApiModelTv: TextView
 }

@@ -18,7 +18,7 @@ import java.io.File
  * Gestión del estado de visión/mmproj (proyección visual para gguf multimodal).
  *
  * Extraído de MainActivity: encapsula la selección, importación, borrado y
- * estado del archivo mmproj, así como la UI de la sección «多模态 gguf».
+ * mmproj file status, as well as the UI of the "multi-modal gguf" section.
  *
  * Las lambdas de UI permiten que el manager controle la lógica mientras
  * MainActivity sigue dueño de las vistas y el ciclo de vida.
@@ -137,7 +137,7 @@ class VisionManager(
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = ctx.dp(4) })
-        // «不使用」
+        // "No mmproj" option
         mmprojContainer.addView(mmprojChip("Sin mmproj", mmprojPath == null, null))
         for (x in files) {
             mmprojContainer.addView(mmprojChip(x.name, x.absolutePath == mmprojPath, x))

@@ -5,7 +5,7 @@ import android.graphics.Color
 import android.view.View
 
 /**
- * Lógica del bloque de configuración de API (estado / 地址 / key / 开关 / 统计)。
+ * Lógica del bloque de configuración de API (estado / address / key / toggle / stats).
  *
  * Extraída tal cual de MainActivity (piloto del refactor): mismo comportamiento,
  * mismos textos, mismas claves de prefs («ponko») y mismos puertos/roles de
@@ -21,7 +21,7 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
         host.chatPrefs().getInt(ApiService.keyPort(role), ApiService.defaultPort(role))
             .coerceIn(1024, 65535)
 
-    /** 刷新某个 API 区块：状态 / 地址 / key / 开关 / 统计 */
+    /** Refresh a specific API block: state / address / key / toggle / stats */
     fun refreshApiBlock(role: ApiServer.Role, b: ApiBlockView?) {
         if (b == null) return
         val running = ApiService.isRunning(role)
@@ -45,7 +45,7 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
     }
 
     fun refreshApiUi() {
-        // 「对话模型：xxx」——告诉用户这个接口到底在服务哪个模型
+        // "Chat model: xxx" — tells the user which model this interface serves
         if (host.modelsInitialized) {
             val name = ChatCore.modelName
             host.chatApiModelTv.text =
@@ -55,7 +55,7 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
         refreshApiBlock(ApiServer.Role.CHAT, host.chatApiBlock)
     }
 
-    /** 绘图侧除了通用内容，还多一行「绘图模型：xxx」——那是句柄层面的状态，与服务无关 */
+    // Drawing side, in addition to generic content, also a "drawing model: xxx" row — handle-level status, unrelated to the service
     fun refreshDrawApiUi() {
         if (host.modelsInitialized) {
             val name = DrawCore.modelName
@@ -66,13 +66,13 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
         refreshApiBlock(ApiServer.Role.DRAW, host.drawApiBlock)
     }
 
-    /** 两个区块一起刷新：两者共用一个前台服务，一边变化常会牵动另一边 */
+    // Refresh both blocks together: they share one foreground service, and a change in one can drag the other
     fun refreshApiSurfaces() {
         refreshApiUi()
         refreshDrawApiUi()
     }
 
-    /** 复制某个服务的地址（点一下地址那行即可） */
+    /** Copy the address of a service (just click the address row) */
     fun copyApiAddress(role: ApiServer.Role) {
         val addr = ApiService.addressOf(role) ?: return
         runCatching {
@@ -82,7 +82,8 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
         }
     }
 
-    /** 生成一个新的 API key（形如 «redacted:sk-…»） */
+    /** Generate a new API key (looks like «redacted:sk-…»)
+     */
     fun newApiKey(role: ApiServer.Role) {
         val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         val key = "sk-ponko-" + (1..32).map { chars.random() }.joinToString("")
@@ -97,7 +98,7 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
         host.toast(activity.getString(R.string.s_418))
     }
 
-    /** 端口 / key 改完之后：该服务在跑就重启它，让新配置立刻生效（不用用户自己记得重启） */
+    /** After changing port / key, the service restarts itself so the new config takes effect immediately (no need for user to remember to restart) */
     fun afterApiConfigChanged(role: ApiServer.Role) {
         refreshApiSurfaces()
         if (ApiService.isRunning(role)) {
@@ -107,11 +108,11 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
     }
 
     /**
-     * 开关某一类 API。
+     * Toggle an API class.
      *
-     * **不检查有没有加载模型** —— 服务只是把 HTTP 端口架起来，加载模型是各接口自己的事：
-     * 没加载时对应接口返回 503 并说明原因。早期版本要求「先加载对话模型」，
-     * 那是把可选前置条件错当成了拦路条件，逼着想开绘图接口的人去加一个无关的模型。
+     * **Does not check whether a model is loaded** -- the service only brings up the HTTP port; loading models is each endpoint's own business:
+     * when none is loaded the endpoint returns 503 with a reason. Older versions required "load the chat model first",
+     * which mistook an optional precondition for a hard blocker and forced anyone wanting the draw endpoint to load an unrelated model.
      */
     fun toggleApi(role: ApiServer.Role) {
         val wasOn = ApiService.isRunning(role)
@@ -120,7 +121,7 @@ class ApiController(private val host: ApiHost) : ThemeAliases {
             activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            // Android 13+ 常驻通知需要运行时权限；不给也能跑，只是看不到通知
+            // Android 13+ persistent notification needs a runtime permission; works without it too, just no notification
             activity.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
         }
         ApiService.sync(activity)

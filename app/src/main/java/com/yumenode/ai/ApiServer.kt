@@ -15,31 +15,34 @@ import java.net.Socket
 import java.util.concurrent.Executors
 
 /**
- * 极简 HTTP/1.1 服务器：把手机上的本地模型开放成 **OpenAI 兼容**接口。
+ * Minimal HTTP/1.1 server: exposes local models on the phone as an **OpenAI-compatible** interface.
  *
- * 只用 JDK 自带能力（ServerSocket + 线程池），不引第三方 HTTP 库：
- * 需要的就几条路由 + SSE，自己写反而更可控（尤其是流式与客户端断连的处理）。
+ * Uses only JDK built-ins (ServerSocket + thread pool), no third-party HTTP library:
+ * just a few routes + SSE needed; writing it ourselves is more controllable
+ * (especially streaming and client disconnect handling).
  *
- * **一个实例只服务一类接口**（[Role]）：
- * - [Role.CHAT]：`/v1/chat/completions` + `/v1/models`（对话模型）
- * - [Role.DRAW]：`/v1/images/generations` + `/v1/models`（绘图模型）
+ * **One instance serves one type of interface only** ([Role]):
+ * - [Role.CHAT]: `/v1/chat/completions` + `/v1/models` (chat models)
+ * - [Role.DRAW]: `/v1/images/generations` + `/v1/models` (drawing models)
  *
- * 两类接口是**互相独立**的：各有各的端口、key、开关与统计数据（见 [ApiService]）。
- * 之所以不像最初那样挤在一个端口上：它们的服务对象、资源占用、安全暴露面都不一样——
- * 出图一张要几十秒且吃满 CPU、只该在可信网络里开；而对话接口是给人天天连的。
- * 想让两者分开配端口 / key 是很自然的需求，硬绑在一起等于剥夺这个选择。
+ * The two interface types are **independent**: each has its own port, key, switch, and stats
+ * (see [ApiService]). Why not cram them onto one port like initially: their service targets,
+ * resource usage, and security exposure differ — one image takes tens of seconds and maxes CPU,
+ * should only run in trusted networks; chat is for daily use.
+ * Wanting to configure port/key separately is natural; hard-binding them together removes that choice.
  *
- * `/health` 与 `/v1/models` 两个实例都有，各自报告**自己那类**模型的状态。
+ * `/health` and `/v1/models` exist on both instances, each reporting **its own type's** model status.
  *
- * 生成全部交给 [ChatCore] / [DrawCore]，这里只做协议转换。一次只允许一个请求
- * （本地模型跑不了并发），忙时返回 429 —— 客户端看到的是标准的 rate-limit 语义。
+ * Generation all goes to [ChatCore] / [DrawCore]; this only does protocol conversion.
+ * Only one request allowed at a time (local models can't do concurrency); busy returns 429 —
+ * the client sees standard rate-limit semantics.
  */
 class ApiServer(
-    /** 监听端口（[ApiService] 用它判断配置有没有变、要不要重启） */
+    /** Listening port ([ApiService] uses it to judge whether config changed, needs restart) */
     val port: Int,
-    /** 为空 = 不校验（用户明确要求「可以有 key 也可以没有」） */
+    /** Empty = no validation (user explicitly asked "key can exist or not") */
     val apiKey: String?,
-    /** 这个实例服务哪一类接口 */
+    /** Which type of interface this instance serves */
     private val role: Role,
     private val log: (String) -> Unit,
 ) {
@@ -53,11 +56,11 @@ class ApiServer(
     @Volatile var running = false
         private set
 
-    /** 处理过的请求数（界面显示用） */
+    /** Number of processed requests (for UI display) */
     @Volatile var served = 0
         private set
 
-    /** 最近一次请求的摘要（界面显示用） */
+    /** Summary of most recent request (for UI display) */
     @Volatile var lastRequest: String? = null
         private set
 
@@ -75,10 +78,10 @@ class ApiServer(
                     pool.execute { runCatching { handle(s) } }
                 }
             }, "ponko-api-accept").apply { isDaemon = true; start() }
-            log("已启动，监听 0.0.0.0:$port")
+            log("Started, listening 0.0.0.0:$port")
             true
         } catch (e: Throwable) {
-            log("启动失败：${e.message ?: e.javaClass.simpleName}（端口被占用？）")
+            log("Start failed: ${e.message ?: e.javaClass.simpleName} (port occupied?)")
             running = false
             false
         }
@@ -89,10 +92,10 @@ class ApiServer(
         runCatching { serverSocket?.close() }
         serverSocket = null
         acceptThread = null
-        log("已停止")
+        log("Stopped")
     }
 
-    // ==================== 连接处理 ====================
+    // ==================== Connection handling ====================
 
     private fun handle(socket: Socket) {
         socket.use { s ->
@@ -118,7 +121,7 @@ class ApiServer(
 
     private fun route(s: Socket, method: String, path: String, headers: Map<String, String>, body: ByteArray) {
         if (method == "OPTIONS") { respond(s, 204, null, ByteArray(0)); return }
-        // 校验：配了 key 才校验（静态页 /health 也放行，方便用户先确认服务活着）
+        // Validation: only validates if key configured (static page /health also passes, so the user can first confirm the service is alive)
         if (!apiKey.isNullOrEmpty() && path != "/health") {
             val auth = headers["authorization"] ?: ""
             val given = auth.removePrefix("Bearer ").trim()
@@ -142,7 +145,7 @@ class ApiServer(
         }
     }
 
-    /** 请求打到了「另一类接口」的端口上——明确告诉客户端该去哪，别让它自己猜 */
+    /** Request hit the "other interface type's" port — clearly tell the client where to go, don't make it guess */
     private fun wrongRole(s: Socket, path: String, wanted: String) {
         val where = if (wanted == "chat") "Chat model" else "Draw model"
         respondJson(s, 404, OpenAiApi.error(
@@ -151,7 +154,7 @@ class ApiServer(
             OpenAiApi.ErrorType.INVALID_REQUEST))
     }
 
-    /** 本实例的状态。两个 role 各自报告自己那类模型的就绪情况。 */
+    /** This instance's status. Both roles each report readiness of their own type of model. */
     private fun healthJson(): JSONObject {
         val o = JSONObject()
             .put("status", "ok")
@@ -184,11 +187,12 @@ class ApiServer(
     // ==================== /v1/images/generations ====================
 
     /**
-     * OpenAI 兼容的文生图。参数没给的沿用 App 里绘图页的当前设置
-     * （步数 / CFG / 尺寸 / 负向提示词 / 采样器 / 调度器 / LoRA）。
+     * OpenAI-compatible text-to-image. Parameters not given fall back to current settings from
+     * the app's draw page (steps / CFG / size / negative prompt / sampler / scheduler / LoRA).
      *
-     * 只支持 `response_format=b64_json`：本机没有公网可访问的 URL 可以当图床，
-     * 所以 `url` 这种返回形式做不到（给了会明确报错，而不是悄悄返回错格式）。
+     * Only supports `response_format=b64_json`: the device has no publicly accessible URL to serve
+     * as image host, so the `url` return form is impossible (given, it reports an error explicitly
+     * instead of quietly returning the wrong format).
      */
     private fun imagesGenerations(s: Socket, body: ByteArray) {
         val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
@@ -217,7 +221,7 @@ class ApiServer(
         }
 
         val n = req.optInt("n", 1).coerceIn(1, 4)
-        // size: "512x512" / "1024x1024"；认不出来就交给 App 当前设置
+        // size: "512x512" / "1024x1024"; unrecognized falls back to the App's current settings
         var w: Int? = null
         var hgt: Int? = null
         val sizeStr = req.optString("size", "").trim()
@@ -243,13 +247,13 @@ class ApiServer(
         val negative = if (req.has("negative_prompt")) req.optString("negative_prompt") else null
         val seed0 = if (req.has("seed")) req.optLong("seed") else -1L
 
-        // ---- 原生 hires fix（sd.cpp 内部实现）----
-        // hires_scale: 2 = 出 2× 大的图（latent 放大 + 第二轮降噪）
-        // hires_denoise: 第二轮降噪强度 0.05–0.99
+        // ---- Native hires fix (implemented inside sd.cpp) ----
+        // hires_scale: 2 = output 2x larger image (latent upscale + second denoising round)
+        // hires_denoise: second-round denoise strength 0.05–0.99
         // hires_upscaler: "latent" | "lanczos" | "nearest" | ...
         val hiresScale = if (req.has("hires_scale")) req.optDouble("hires_scale").toFloat() else 0f
         val hiresDenoise = if (req.has("hires_denoise")) req.optDouble("hires_denoise").toFloat() else 0.7f
-        // ---- VAE tiling（分块编解码，省内存）----
+        // ---- VAE tiling (tiled encode/decode, saves memory) ----
         // vae_tiling: true/false · vae_tile_size: px · vae_tile_overlap: 0–0.5
         val vaeTiling = req.optBoolean("vae_tiling", false)
         val vaeTileSize = req.optInt("vae_tile_size", 512).coerceIn(64, 2048)
@@ -269,7 +273,7 @@ class ApiServer(
 
         val arr = JSONArray()
         try {
-            // n 张一起交给 DrawCore（同一次持锁连着出），避免两张之间被界面插队
+            // n images passed to DrawCore together (one lock hold, generated in a row), preventing UI from sneaking in between
             val results = runBlocking {
                 DrawCore.generate(prompt, n, seed0, steps, cfg, w, hgt, negative,
                     hiresScale = hiresScale,
@@ -286,7 +290,7 @@ class ApiServer(
                     android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)))
             }
         } catch (e: Throwable) {
-            // 走到这里多半是客户端中途断开（写不出去）或引擎出错
+            // Getting here mostly means the client disconnected mid-way (can't write) or an engine error
             runCatching {
                 respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
             }
@@ -350,7 +354,7 @@ class ApiServer(
             return
         }
 
-        // ---- SSE 流式 ----
+        // ---- SSE streaming ----
         val out = s.getOutputStream()
         writeHead(out, 200, "text/event-stream")
         var broke = false
@@ -358,7 +362,7 @@ class ApiServer(
             if (broke) return
             try { writeChunk(out, OpenAiApi.sseEvent(obj)) } catch (_: Throwable) {
                 broke = true
-                ChatCore.requestCancel()   // 客户端断开就别再算了
+                ChatCore.requestCancel()   // client disconnected, stop computing
             }
         }
         fun deltaEvent(content: String, role: String? = null) {
@@ -382,10 +386,10 @@ class ApiServer(
         }
     }
 
-    /** 粗估 token（本地模型没有分词器接口，按 4 字符 ≈ 1 token）——只用于 usage 字段 */
+    /** Rough token estimate (local models have no tokenizer interface, 4 chars ≈ 1 token) — usage field only */
     private fun estimateTokens(chars: Int): Int = TokenEstimator.fromChars(chars)
 
-    // ==================== HTTP 输出 ====================
+    // ==================== HTTP output ====================
 
     private fun respond(s: Socket, code: Int, contentType: String?, body: ByteArray) {
         val out = s.getOutputStream()
@@ -405,7 +409,7 @@ class ApiServer(
     private fun respondJson(s: Socket, code: Int, obj: JSONObject) =
         respond(s, code, "application/json; charset=utf-8", obj.toString().toByteArray(Charsets.UTF_8))
 
-    /** SSE 头：分块传输，先不给 Content-Length，边算边发 */
+    /** SSE header: chunked transfer, no Content-Length upfront; send while computing */
     private fun writeHead(out: OutputStream, code: Int, contentType: String) {
         val sb = StringBuilder()
         sb.append("HTTP/1.1 ").append(code).append(" OK\r\n")

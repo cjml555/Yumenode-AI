@@ -110,20 +110,20 @@ import com.yumenode.ai.FeatureToggleManager
 class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost, ChatSessionHost, DrawModelsHost, ShellHost, ModelLoadHost, BenchmarkHost, LocaleHost {
 
     // ---- palette ----
-    // ================= 主题 =================
-    // 所有界面颜色都来自 pal（见 YumenodeTheme）；这里只做取名，方便沿用 C_XXX。
-    // 新增控件请用这些常量，不要再写死色值，否则深色模式会留下白块。
+    // ================= Theme =================
+    // All UI colors come from pal (see YumenodeTheme); here we just name them so C_XXX stays usable.
+    // Use these constants for new controls; don't hardcode colors, or dark mode leaves white blocks.
 
-    /** 主题管理器：separates theme state & palette logic from UI */
+    /** Theme manager: separates theme state & palette logic from UI */
     override val themeManager = ThemeManager(this) {
         // Theme applied — rebuild UI palette accessors
     }
 
-    /** 当前主题模式：0=跟随系统 1=浅色 2=深色（存在 ponko 偏好里） */
+    /** Current theme mode: 0=system, 1=light, 2=dark (stored in ponko prefs) */
     override val themeMode: Int
         get() = themeManager.themeMode
 
-    /** 当前配色表 */
+    /** Current palette */
     val pal: YumenodeTheme
         get() = themeManager.pal
 
@@ -247,7 +247,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         { text, color -> setStatus(text, color) },
         { toast(it) },
     )
-    /** 多模态 gguf：视觉投影文件（mmproj）管理委托ado a VisionManager */
+    /** Multimodal GGUF: mmproj (vision projection) file management delegated to VisionManager */
     private var visionManager: VisionManager? = null
 
     /** Construcción de parámetros de inferencia (gguf / litertlm) */
@@ -264,9 +264,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    // ---- 对话参数（模型页 · 对话模型）----
+    // ---- Chat params (models page . chat model) ----
     override val chatParams = ChatParams(this) { modelPathInternal }
-    /** 回填参数到输入框时临时屏蔽 TextWatcher，免得多字段被互相覆盖 */
+    /** Temporarily suppress the TextWatcher when backfilling params into inputs, so fields don't overwrite each other */
     private val chatParamsOwnerTv: TextView? get() = modelsPage.chatParamsOwnerTv
     private val chatCtxEdit: EditText? get() = modelsPage.chatCtxEdit
     private val chatMaxOutEdit: EditText? get() = modelsPage.chatMaxOutEdit
@@ -279,10 +279,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     internal var busy = false
     private val modelLoadController by lazy { ModelLoadController(this) }
 
-    /** Chat 消息处理：构造文件块、编码文件、估算 token、准备发送 */
+    /** Chat message handling: build file blocks, encode files, estimate tokens, prepare to send */
     internal val chatManager = ChatManager(this, attachmentHandler)
 
-    /** 当前加载的 .litertlm 模型是否支持图像输入（读模型自带 Capabilities，失败按不支持处理）。 */
+    /** Whether the loaded .litertlm model supports image input (reads the model's Capabilities; treats as unsupported on failure). */
     /** true = el modelo cargado soporta entrada visual (delegado a VisionManager) */
     override var visionOk: Boolean
         get() = visionManager?.visionOk ?: false
@@ -292,17 +292,17 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     override var mmprojPath: String?
         get() = visionManager?.mmprojPath
         set(v) { visionManager?.mmprojPath = v }
-    /** 「借打标看图」时工具结果用哪个角色候选回传（0=首选，试错后记住可用的那个） */
+    /** Which role candidate to return tool results with when borrowing the tagger to see images (0=first choice; remembered once one works) */
     override var tagReturnIdx = 0
-    /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图（propiedad de ChatInputBar) */
+    /** Input bar "+" attach button; preview strip and thumbnails for pending images (ChatInputBar property) */
     private val attachButton: TextView get() = chatInputBar.attachButton
     private val attachPreviewStrip: HorizontalScrollView get() = chatInputBar.attachPreviewStrip
     private val attachPreviewBox: LinearLayout get() = chatInputBar.attachPreviewBox
 
-    /** 待发送的文本文件（已解析出文字），最多 MAX_FILES 个 */
+    /** Pending text files to send (already parsed), up to MAX_FILES */
     // private val pendingFiles = ArrayList<PendingFile>()
 
-    /** 用户选的文件：文件名 + 原始字节数 + 解析出的正文（可能已截断）+ 结构说明（如「12 页」） */
+    /** User-selected files: filename + raw byte count + parsed body (may be truncated) + structure note (e.g. "12 pages") */
     // private class PendingFile(
     //     val name: String,
     //     val bytes: Long,
@@ -311,30 +311,30 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     //     val detail: String? = null,
     // )
 
-    /** 文件读取结果：成功给 file，失败给 error（可直接显示的文案） */
+    /** File read result: file on success, error (displayable text) on failure */
     // private class FileRead(val file: PendingFile?, val error: String?)
 
-    /** 当前处于绘图模式：对话页的输入会被当作正面提示词去生成图片 */
-    /** 语言模型可用的绘图命令说明（仅当绘图模型与语言模型同时就绪时注入）。 */
+    /** Currently in draw mode: chat page input is treated as a positive prompt for image generation */
+    /** Draw command instructions for the LLM (injected only when both draw and chat models are ready). */
     internal val drawToolPrompt = CommandScanner.DRAW_TOOL_PROMPT
 
-    /** 语言模型与绘图模型同时就绪 → 语言模型可以用 <draw> 命令调绘图模型。 */
+    /** When the LLM and draw model are both ready -> the LLM can invoke the draw model via <draw> commands. */
     internal val canDrawFromChat: Boolean
         get() = drawPageInternal?.isReady() == true && (engine != null || llamaModel != null)
 
-    /** 从回答里取出 <draw>…</draw> 命令：返回提示词与命中位置（不改内容，由调用方替换） */
+    /** Extract <draw>...</draw> from the answer: returns the prompt and match span (content unchanged; caller replaces it) */
     internal fun scanDrawCommand(answer: String, thought: String): DrawHit? =
             commandScanner.scanDrawCommand(answer, thought, canDrawFromChat)
 
-        /** 语言模型看不见图、但打标模型已加载 → 可以用 <tag> 命令让系统去识别图片。 */
+        /** The LLM can't see images but the tagger is loaded -> the system can use <tag> commands to recognize images. */
         internal val canTagFromChat: Boolean
             get() = drawPageInternal?.taggerLoaded() == true && (engine != null || llamaModel != null) && !visionOk
 
-        /** 这一轮带图、模型自己看不见、且还没识别过 → 本轮就把打标命令说明给模型 */
+        /** This round has images, the model can't see them, and they haven't been tagged yet -> give the model the tag command instructions this round */
         internal fun canTagTurn(t: QaTurn?): Boolean =
             canTagFromChat && t?.userImage != null
 
-        /** 看不见图的模型：告诉它可以用 <tag> 命令让打标模型去看用户发的图。 */
+        /** For models that can't see images: tell them they can use <tag> to have the tagger look at the user's images. */
         private val tagToolPrompt = """【图片工具】你自己看不到图片内容，但可以调用本机的打标模型，把用户刚发来的图片转成英文标签。
             用户消息里说明了「带了图片」时就是真的有图：此时必须调用下面的图片工具，
             绝对不要回复「请提供图片」或「我看不到图片」之类的推辞。
@@ -344,32 +344,32 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             命令写在正文的最后一行，不要写进思考过程。系统随后会把识别结果发给你，你再根据这些标签回答用户的问题.
         """.trimIndent()
 
-        /** 看不见图的模型：本轮带图时给它的提示（先告知「带了图」，再给工具命令格式） */
+        /** Prompt for models that can't see images, given when this round has images: first note "images attached", then the tool command format */
         internal fun tagHint(t: QaTurn?): String {
             val n = ChatSendLogic.countImages(t?.userImage)
             return getString(R.string.s_329, n) + "\n" + tagToolPrompt
         }
 
-        /** 不做工具调用时，把回答里可能残留的 <tag …></tag> 命令抹掉（别把命令原文当正文显示给用户） */
+        /** When not making a tool call, strip any leftover <tag ...></tag> commands from the answer (don't show the raw command as body text) */
 
-        /** 从回答里取出 <tag …></tag> 命令：返回参数与命中位置（不改内容，由调用方替换） */
+        /** Extract <tag ...></tag> from the answer: returns params and match span (content unchanged; caller replaces it) */
         internal fun scanTagCommand(answer: String, thought: String): TagHit? =
             commandScanner.scanTagCommand(answer, thought, canTagFromChat)
 
     /**
-     * 跑一轮生成（gguf / litertlm 两条路径），把输出流式渲染进 ai。
-     * displayPrefix、thoughtPrefix 是前面几轮已经落在气泡里的内容，这样工具调用可以
-     * 在同一个气泡里接着往下写，而不是把整轮重来一遍。
+     * Run one generation round (both gguf and litertlm paths), streaming output into ai.
+     * displayPrefix and thoughtPrefix are content already rendered in the bubble from earlier rounds,
+     * so tool calls can keep writing into the same bubble instead of restarting the whole round.
      */
 
 
-    /** 对话页当前是否「出图模式」。
-     *  规则：语言模型在场时（包括两种模型同时加载），对话页一律走聊天；
-     *  只有「绘图模型已就绪、且没有加载语言模型」时，对话页输入才当成绘图提示词。 */
+    /** Whether the chat page is currently in "draw mode".
+     *  Rule: when an LLM is present (including both models loaded), the chat page always chats;
+     *  only when the draw model is ready and no LLM is loaded is chat input treated as a draw prompt. */
     internal val drawMode: Boolean
         get() = drawPageInternal?.isReady() == true && engine == null && llamaModel == null
 
-    /** .gguf 架构探测结果缓存，避免重复读头部 */
+    /** Cache for .gguf architecture probe results, avoids re-reading the header */
     private val ggufKindCacheInternal = HashMap<String, GgufProbe.Kind>()
     override var genJob: Job? = null
     /** Ultimo resultado del benchmark (para compartir anonimamente). */
@@ -382,23 +382,23 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val sessions = mutableListOf<ChatSession>()
     internal lateinit var current: ChatSession
 
-    /** 当前会话创建时的思考开关状态；与复选框不一致时需重建会话。 */
+    /** Thinking toggle state at session creation; rebuild the session if it diverges from the checkbox. */
     override var convThinking: Boolean? = null
 
-    /** 中断后 LiteRT 会话可能已不可用：标记下一条消息发送前静默重建。 */
+    /** After an interrupt the LiteRT session may be unusable: flag a silent rebuild before the next send. */
     internal var convNeedsRebuild = false
 
-    /** 创建 LiteRT 会话时是否注入了 <draw> 绘图命令提示。
-     *  加载/卸载绘图模型会改变这个能力，而 LiteRT 的 system 提示只在建会话时写入，
-     *  所以能力变化后必须重建会话，否则模型根本不知道自己能画图。 */
+    /** Whether the <draw> command prompt was injected when the LiteRT session was created.
+     *  Loading/unloading the draw model changes this capability, and LiteRT's system prompt is
+     *  written only at session creation, so rebuild when capability changes, or the model never knows it can draw. */
     override var convDrawCapable = false
 
-    /** GGUF（llama.cpp）后端实例；非空表示当前加载的是 .gguf 模型。 */
+    /** GGUF (llama.cpp) backend instance; non-null means a .gguf model is currently loaded. */
     override var llamaModel: LlamaModel? = null
     internal var ggufIterator: LlamaIterator? = null
 
-    /** 用户点了「停止」。native 中断后往往抛异常（如 llama.cpp 的 task not found），
-     *  用它把「主动中断」和「真的出错」分开，避免已输出的内容被错误信息覆盖。 */
+    /** User tapped "stop". Native interrupts often throw (e.g. llama.cpp task not found);
+     *  this flag separates intentional stops from real errors, so already-output content isn't overwritten with an error message. */
     @Volatile
     internal var stopRequested = false
 
@@ -414,15 +414,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     /** Página de modelos extraída: dueña de sus vistas (MainActivity las delega). */
     private lateinit var modelsPage: ModelsPage
 
-    // 模型页：顶部页签 + 左右翻页
+    // Models page: top tabs + left-right swipe
     private val modelsPager: ViewPager get() = modelsPage.modelsPager
     private val modelsTabChat: TextView get() = modelsPage.modelsTabChat
     private val modelsTabDraw: TextView get() = modelsPage.modelsTabDraw
     private val modelsTabTag: TextView get() = modelsPage.modelsTabTag
     private lateinit var tabSettings: View
 
-    // ---- API 设置区块：对话 / 绘图各一套，由 buildApiBlock() 生成，结构完全一致 ----
-    // ApiHost：ApiController 的逻辑在 ApiController.kt；这里只暴露视图 + 委托。
+    // ---- API settings blocks: one each for chat and draw, generated by buildApiBlock(), identical structure ----
+    // ApiHost: ApiController logic lives in ApiController.kt; here we only expose views + delegate.
     private val apiController by lazy { ApiController(this) }
 
     // AttachHost: la lógica de adjuntos vive en AttachController.kt
@@ -515,24 +515,24 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     override val modelsInitialized: Boolean get() = ::modelsPage.isInitialized
     override val chatApiBlock: ApiBlockView? get() = modelsPage.chatApiBlock
     override val drawApiBlock: ApiBlockView? get() = modelsPage.drawApiBlock
-    /** 两边各有一行「xx模型：xxx」，插在 API 区块的地址下面 */
+    /** One "xx model: xxx" line on each side, inserted below the API block's address */
     override val chatApiModelTv: TextView get() = modelsPage.chatApiModelTv
-    // ---- 「对话模型」页内再分两个子页：模型 / API ----
+    // ---- "Chat model" page split into two sub-pages: model / API ----
     private val chatSubTabModel: TextView get() = modelsPage.chatSubTabModel
     private val chatSubTabApi: TextView get() = modelsPage.chatSubTabApi
     private val chatModelPane: View get() = modelsPage.chatModelPane
     private val chatApiPane: View get() = modelsPage.chatApiPane
-    // ---- 「绘图模型」页内再分两个子页：模型 / API ----
+    // ---- "Draw model" page split into two sub-pages: model / API ----
     private val drawSubTabModel: TextView get() = modelsPage.drawSubTabModel
     private val drawSubTabApi: TextView get() = modelsPage.drawSubTabApi
     private val drawModelPane: View get() = modelsPage.drawModelPane
     private val drawApiPane: View get() = modelsPage.drawApiPane
-    /** 「绘图模型：xxx」那一行（绘图侧独有，插在 API 区块的地址下面） */
+    /** The "draw model: xxx" line (draw-side only, inserted below the API block's address) */
     override val drawApiModelTv: TextView get() = modelsPage.drawApiModelTv
     private lateinit var tabDraw: View
     override lateinit var inputBar: View
 
-    /** 绘图页（文生图/图生图），懒加载 */
+    /** Draw page (text-to-image / image-to-image), lazily loaded */
     internal var drawPageInternal: DrawPage? = null
     private lateinit var appBarMenu: View
     private lateinit var appBarPlus: View
@@ -546,42 +546,42 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private lateinit var tabDownload: View
     private lateinit var tabGallery: View
 
-    /** 模型页里的绘图模型状态文本（模型统一在模型页加载） */
+    /** Draw model status text in the models page (draw models are loaded from the models page) */
     private val drawModelStatusInternal: TextView? get() = modelsPage.drawModelStatus
-    /** 已复制的绘图模型列表容器 */
+    /** Container for the copied draw model list */
     private val drawSavedContainer: LinearLayout? get() = modelsPage.drawSavedContainer
-    /** 绘图模型的「加载/卸载」二合一按钮 */
+    /** Combined load/unload button for the draw model */
     private val drawToggleBtn: TextView? get() = modelsPage.drawToggleBtn
-    /** 绘图模型的「导入」按钮（复制期间禁用） */
+    /** "Import" button for the draw model (disabled during copy) */
     private val drawImportBtn: TextView? get() = modelsPage.drawImportBtn
-    /** 绘图模型导入进度条（本地复制时显示） */
+    /** Draw model import progress bar (shown during local copy) */
     private val drawProgress: ProgressBar? get() = modelsPage.drawProgress
-    /** 打标（Tagger）状态文本（模型页） */
+    /** Tagger status text (models page) */
     private val taggerStatusTvInternal: TextView? get() = modelsPage.taggerStatusTv
-    /** 打标模型 / 标签表导入按钮 */
+    /** Import buttons for tagger model / label table */
     private val taggerOnnxBtn: TextView? get() = modelsPage.taggerOnnxBtn
     private val taggerCsvBtn: TextView? get() = modelsPage.taggerCsvBtn
-    /** 已导入的打标模型 / 标签表列表容器 */
+    /** Container for imported tagger model / label table list */
     private val taggerBoxInternal: LinearLayout? get() = modelsPage.taggerBox
-    /** 打标模型 加载/卸载 按钮 */
+    /** Tagger model load/unload button */
     private val taggerLoadBtnInternal: TextView? get() = modelsPage.taggerLoadBtn
-    /** 当前选定的绘图主模型（绝对路径） */
-    /** 当前选用的模型集 id（多文件模型 = 一组文件） */
+    /** Currently selected draw main model (absolute path) */
+    /** Currently chosen model set id (multi-file model = a group of files) */
     private var drawSetIdInternal: String? = null
-    /** 正在等文件选择结果的槽位（null = 主模型文件） */
+    /** Slot waiting for a file selection result (null = main model file) */
     private var pendingSlotKeyInternal: String? = null
     private val drawSlotsContainerInternal: LinearLayout? get() = modelsPage.drawSlotsContainer
-    /** 槽位面板的折叠标题行 */
+    /** Collapsible header row for the slot panel */
     private var drawSlotsHeaderInternal: TextView? = null
-    /** 槽位面板是否展开（默认收起，省地方） */
+    /** Whether the slot panel is expanded (collapsed by default to save space) */
     private var drawSlotsExpandedInternal = false
-    /** LoRA 状态文本（模型页） */
+    /** LoRA status text (models page) */
     private val loraStatusTvInternal: TextView? get() = modelsPage.loraStatusTv
-    /** 已安装 LoRA 列表容器（模型页） */
+    /** Installed LoRA list container (models page) */
     private val loraBoxInternal: LinearLayout? get() = modelsPage.loraBox
-    /** 上次启动时发现「加载绘图模型」中途崩了（native 崩溃，Java 层捕不到） */
+    /** Last startup found the draw model load crashed mid-way (native crash, uncatchable from Java) */
     private var pendingDrawCrash = false
-    /** 上次崩溃时已执行的阶段（来自 draw/.loadstage） */
+    /** Stage reached when the last crash happened (from draw/.loadstage) */
     private var pendingDrawStage: String? = null
     override val backendSpinner: Spinner get() = modelsPage.backendSpinner
     override val loadButton: TextView get() = modelsPage.loadButton
@@ -607,7 +607,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val drawerWidthDp = 280
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // 最早挂上崩溃钩子：连主题解析 / 建界面阶段的异常也能落盘（崩在 buildUi 里否则没日志）
+        // Install the crash hook earliest: exceptions during theme parsing / UI build also get logged (a crash inside buildUi would otherwise leave no trace)
         crashHandler.install()
         // Trial GPU colgado = el intento anterior con Vulkan mato el proceso:
         // apagar el toggle solo y seguir en CPU.
@@ -616,7 +616,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             // se guarda para mostrarlo al final de onCreate.
             gpuCrashNotice = true
         }
-        // 主题必须在 setContentView 之前定好（系统栏/窗口底色来自 style，界面颜色来自 pal）
+        // Theme must be set before setContentView (system bar/window colors come from style, UI colors from pal)
         themeManager.loadThemeMode(chatPrefs())
         themeManager.applyThemeInPlace()
         setTheme(if (themeManager.pal.isDark) R.style.AppTheme_Dark else R.style.AppTheme)
@@ -627,8 +627,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(LinkifyPlugin.create())
             .build()
-        // 流式渲染器故意不装表格插件：表格是两遍异步布局（先测列宽再重排），
-        // 边生成边重渲染会让气泡高度反复跳变（上下抽搯）。表格放到生成结束后一次渲染。
+        // The streaming renderer deliberately omits the table plugin: tables need two-pass
+        // async layout (measure column widths then reflow), and re-rendering during streaming makes the bubble height jump; tables get one render after generation ends.
         markwonStream = Markwon.builder(this)
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(LinkifyPlugin.create())
@@ -668,19 +668,19 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     /**
-     * 原地换主题：重算配色 → 改系统栏颜色 → 用新配色把界面重建一遍。
+     * Apply the theme in place: recompute palette -> update system bar colors -> rebuild the UI with the new palette.
      *
-     * 不走 recreate()：Activity 重建会把 chat 引擎、绘图 native 上下文、ONNX 打标会话
-     * 一起丢掉（用户感受就是"设置一动就重启"）。这里只重建 View，这些对象都留着。
+     * We don't call recreate(): Activity reconstruction would discard the chat engine, draw native context,
+     * and ONNX tagger session (users would feel it as "changing a setting restarts the app"). Here we only rebuild the View; those objects stay alive.
      */
     override fun applyThemeInPlace() {
         themeManager.applyThemeInPlace()
-            // 记住当前页：buildUi() 末尾会把界面切回来
+            // Remember the current page: buildUi() switches back to it at the end
             chatPrefs().edit().putInt("restoreTab", currentTab).apply()
             buildUi()
         }
 
-        /** manifest 里声明了 uiMode，系统切深浅色不会自动重建，这里手动跟上。 */
+        /** The manifest declares uiMode, so system light/dark switches don't auto-rebuild; we follow along manually. */
         override fun onConfigurationChanged(newConfig: Configuration) {
             super.onConfigurationChanged(newConfig)
             val themeChanged = themeManager.onConfigurationChanged(newConfig)
@@ -689,17 +689,17 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             if (themeChanged || localeChanged) applyThemeInPlace()
         }
 
-    /** 崩溃自捕获：Java/ART 层异常（含 UnsatisfiedLinkError）写进文件，下次启动可见。 */
+    /** Self-catching crashes: Java/ART exceptions (including UnsatisfiedLinkError) are written to a file, visible on next launch. */
     private fun installCrashHandler() {
         crashHandler.install()
     }
 
-    /** 读并清空崩溃日志（供模型页展示） */
+    /** Read and clear the crash log (shown on the models page) */
     private fun takeCrashLog(): String? {
         return crashHandler.takeCrashLog()
     }
 
-    /** 将 MainActivity 的 session 状态同步到 SessionManager */
+    /** Sync MainActivity's session state into SessionManager */
     private fun syncSessionToManager() {
         val convertedSessions = sessions.map { s ->
             com.yumenode.ai.ChatSession(s.id, s.title).apply {
@@ -725,7 +725,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         super.onPause()
         syncSessionToManager()
         sessionManager.save()
-        drawPageInternal?.persistAll()   // 绘图参数兜底落盘
+        drawPageInternal?.persistAll()   // Persist draw params as a safety net
     }
 
     override fun onDestroy() {
@@ -733,20 +733,20 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         syncSessionToManager()
         try { sessionManager.save() } catch (_: Throwable) {}
         scope.cancel()
-        // 绘图引擎：只有「绘图 API 在跑」时才把句柄留给服务继续出图，否则正常释放（别白占内存）。
-        // 顺序不能反——先断开 DrawCore 的引用，再真正 free。
+        // Draw engine: only leave the handle for the service to keep drawing when the draw API is running; otherwise release normally (don't waste memory).
+        // Order matters - disconnect the DrawCore reference first, then actually free.
         if (!ApiService.isRunning(ApiServer.Role.DRAW)) {
             DrawCore.release()
             try { drawPageInternal?.release() } catch (_: Throwable) {}
         }
         if (!ApiService.isRunning(ApiServer.Role.CHAT)) {
-            // 对话 API 没开 → 按老规矩把模型放掉
+            // Chat API not running -> release the model as usual
             try { engine?.close() } catch (_: Throwable) {}
             try { llamaModel?.close() } catch (_: Throwable) {}
             ChatCore.release()
         }
-        // 对话 API 还开着：模型留给服务继续推理（关掉它会让 API 立刻不可用），
-        // 这里只断开界面自己的引用
+        // Chat API still running: leave the model for the service to keep inferring (closing it would
+        // make the API unavailable immediately); here we only drop the UI's own reference.
         engine = null
         llamaModel = null
         conversation = null
@@ -766,13 +766,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
         main.addView(buildAppBar(), matchWrap())
 
-        // 四页内容：对话 / 模型 / 绘图 / 关于（底部菜单切换）
+        // Four content pages: chat / models / draw / about (switched by the bottom menu)
         tabChat = buildChatPage()
-        // 注意顺序：DrawPage 必须先建好并赋给 drawPageInternal，再建「模型」页。
-        // 「模型」页构建时就地读取 drawPageInternal 的状态（LoRA 列表 / 已复制绘图模型清单），
-        // 顺序反了会拿到 null，每次启动都显示成「未安装」。
-        // 复用已存在的 DrawPage：换主题时重建的是视图，native 上下文 / 已加载的模型
-        // 都留在同一个实例里（否则换一次主题就要重新加载绘图模型）。
+        // Order matters: DrawPage must be built and assigned to drawPageInternal before the "models" page.
+        // The "models" page reads drawPageInternal's state in place during build (LoRA list / copied draw model list);
+        // reversing it yields null and every startup shows "not installed".
+        // Reuse the existing DrawPage: a theme change rebuilds only the View; the native context / loaded models
+        // stay in the same instance (otherwise every theme change reloads the draw model).
         val dpg = drawPageInternal ?: DrawPage(this, scope, pal)
         dpg.setPalette(pal)
         drawPageInternal = dpg
@@ -791,26 +791,26 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         )
         tabGallery = galleryPage!!.build()
         // La pestaña de descargas se construye en DownloadPage
-        // 绘图模型就绪 → 进入绘图模式（对话页输入即正面提示词）
+        // Draw model ready -> enter draw mode (chat page input becomes a positive prompt)
         dpg.onPipelineReady = {
-            // 回调可能来自 IO 线程，UI 操作统一回主线程
+            // The callback may come from an IO thread; route all UI ops back to the main thread
             runOnUiThread {
                 dpg.llmLoaded = false
                 updateThinkEnabled()
                 drawModelStatusInternal?.text = dpg.modelSummary()
                 refreshDrawModelsInternal()
-                refreshDrawApiUi()   // 绘图接口那边要跟着显示「绘图模型：xxx」
+                refreshDrawApiUi()   // The draw API block must show "draw model: xxx" too
             }
         }
         dpg.onSaveImage = { bmp, name -> saveImageToGallery(bmp, name) }
         dpg.onStatus = { text, isError ->
             runOnUiThread { setStatus(text, if (isError) C_ERR else C_WARN) }
         }
-        // 注意：不在启动时自动加载绘图模型——native 加载失败会直接崩掉启动流程。
-        // 改为在「模型」页手动点「加载绘图模型」（见下方按钮）。
-        // 绘图页内部用 ViewPager 做左右翻页，外层不能再套 ScrollView（横竖滑动会打架）
+        // Note: don't auto-load the draw model at startup - a native load failure would crash the launch flow.
+        // Instead, manually tap "load draw model" on the models page (button below).
+        // The draw page uses ViewPager for left-right swiping; no outer ScrollView (horizontal/vertical scrolls would conflict)
         tabDraw = runCatching { dpg.build() }.getOrElse { e ->
-            // 兜底：绘图页构建失败也不能让整个 App 挂掉，把原因显示出来便于定位
+            // Fallback: a draw page build failure must not take down the whole App; show the cause for diagnosis
             ScrollView(this).apply {
                 setBackgroundColor(C_BG)
                 addView(TextView(this@MainActivity).apply {
@@ -852,7 +852,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         refreshSavedModels()
         restoreSession()
         switchTab(0)
-        // 主题切换导致的重建：回到重建前那一页（一次性，正常启动不受影响）
+        // Rebuild caused by a theme switch: return to the pre-rebuild page (one-off; normal startup unaffected)
         val restoreTab = chatPrefs().getInt("restoreTab", -1)
         if (restoreTab in 0..5) {
             chatPrefs().edit().remove("restoreTab").apply()
@@ -860,7 +860,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    /** 对话页：消息列表 + 回到底部按钮 + 智能跟随滚动。 */
+    /** Chat page: message list + jump-to-bottom button + smart auto-follow scroll. */
     override fun buildChatPage(): View {
         val chatWrap = FrameLayout(this)
         scrollView = ScrollView(this).apply {
@@ -872,7 +872,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         scrollView.addView(chatContainer, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        // 用户上滑阅读时暂停自动跟随；此按钮一键回到底部
+        // Pause auto-follow while the user scrolls up to read; this button jumps back to the bottom
         jumpButton = TextView(this).apply {
             text = "↓"
             textSize = 19f
@@ -890,7 +890,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             setMargins(0, 0, dp(16), dp(16))
         })
 
-        // 滚动管理委托给 ChatScrollManager（auto-follow / jump-to-bottom 按钮 / foco del input）
+        // Scroll management delegated to ChatScrollManager (auto-follow / jump-to-bottom button / input focus)
         chatScrollManager = ChatScrollManager(this, scrollView, jumpButton) { inputEdit }
         return chatWrap
     }
@@ -967,15 +967,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         return bar
     }
 
-    /** 模型页：选择/加载模型 + 后端选择。 */
+    /** Models page: select/load model + backend selection. */
 
-    /** 模型页：单个面板包一层可纵向滚动的 ScrollView */
+    /** Models page: a single panel wrapped in a vertically scrollable ScrollView */
     private fun modelsPane(inner: View) = ModelsHelpers.modelsPane(this, inner)
 
-    /** "对话模型"子页签样式（比顶部页签再小一号，同绘图页的 结果/过程） */
+    /** "Chat model" sub-tab style (one size smaller than the top tabs, matching the draw page's result/process) */
     private fun modelsSubTab(t: String) = ModelsHelpers.modelsSubTab(this, t)
 
-    /** 切换「对话模型」页内的子页：0=模型 1=API */
+    /** Switch sub-page within the "chat model" page: 0=model 1=API */
     private fun switchChatSubPage(p: Int) {
         if (!::modelsPage.isInitialized) return
         ModelsHelpers.switchSubPage(
@@ -989,7 +989,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         if (p == 1) refreshApiUi()
     }
 
-    /** 切换「绘图模型」页内的子页：0=模型 1=API */
+    /** Switch sub-page within the "draw model" page: 0=model 1=API */
     private fun switchDrawSubPage(p: Int) {
         if (!::modelsPage.isInitialized) return
         ModelsHelpers.switchSubPage(
@@ -1003,13 +1003,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         if (p == 1) refreshDrawApiUi()
     }
 
-    /** 模型页顶部页签样式（与绘图页一致） */
+    /** Top tab style for the models page (consistent with the draw page) */
     private fun tabItem(t: String) = ModelsHelpers.tabItem(this, t)
 
-    // ==================== API 服务（对话 / 绘图两套，结构完全一致） ====================
+    // ==================== API services (chat and draw, identical structure) ====================
 
-    /** 委托给 [ApiBlockBuilder]：真正建控件的活儿都在那边，
-     * 这里只负责把 Activity 上的动作接过去。
+    /** Delegated to [ApiBlockBuilder]: the actual widget construction lives there,
+     * here we only wire up the Activity's actions.
      */
     private fun buildApiBlock(
         role: ApiServer.Role,
@@ -1027,7 +1027,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         onRefreshSurfaces = { refreshApiSurfaces() },
     ).build(role, extraAfterAddress, extraNotes)
 
-    // ---- API 逻辑：已提取到 ApiController.kt；这里只做兼容委托（ModelsHost/buildApiBlock 不变） ----
+    // ---- API logic: extracted to ApiController.kt; here we only do compatibility delegation (ModelsHost/buildApiBlock unchanged) ----
     private fun apiPort(role: ApiServer.Role): Int = apiController.apiPort(role)
     private fun refreshApiBlock(role: ApiServer.Role, b: ApiBlockView?) {
         apiController.refreshApiBlock(role, b)
@@ -1049,7 +1049,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     private fun toggleApi(role: ApiServer.Role) { apiController.toggleApi(role) }
 
-    /** 切换模型页的「对话模型 / 绘图模型 / 打标模型」 */
+    /** Switch the models page's "chat model / draw model / tagger model" */
     override fun switchModelsTab(index: Int) {
         if (::modelsPage.isInitialized) modelsPager.setCurrentItem(index, true)
         highlightModelsTabs(index)
@@ -1060,7 +1060,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    /** 同步模型页页签高亮；手势翻页时也由它更新 */
+    /** Sync the models page tab highlight; also updated during gesture swiping */
     override fun highlightModelsTabs(selected: Int) {
         if (!::modelsPage.isInitialized) return
         ModelsHelpers.highlightTabs(
@@ -1070,7 +1070,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         )
     }
 
-    /** 模型页的翻页适配器：直接复用已建好的三个面板，不重建 */
+    /** Models page view pager adapter: reuses the three already-built panes, no rebuild */
     private class ModelsPaneAdapter(private val panes: List<View>) : PagerAdapter() {
         override fun getCount() = panes.size
         override fun isViewFromObject(view: View, obj: Any) = view === obj
@@ -1086,7 +1086,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    /** 关于页：角色原图 + 说明。 */
+    /** About page: character art + description. */
     /** Pestaña de ajustes: vive en SettingsPage.kt */
     private fun buildSettingsPage(): View = SettingsPage(this).build()
 
@@ -1172,23 +1172,23 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
 
     /**
-     * 设置页里的可折叠分区：返回可往里塞内容的容器。
-     * 标题行（标题 + 箭头）点一下展开 / 收起。
+     * Collapsible section in the settings page: returns a container you can fill with content.
+     * The header row (title + arrow) expands/collapses on tap.
      */
     /**
-     * 可折叠分区。
+     * Collapsible section.
      *
-     * @param expanded 首次使用（还没有存过偏好）时的默认展开状态
-     * @param prefKey  记住展开状态的偏好键；**null = 不持久化**（每次都回到 [expanded]）。
-     *                 不传 key 的话用户合上分区、切走再回来就会弹回去——这正是「关于」页
-     *                 之前的问题：状态只存在 `open` 这个内存变量里。
+     * @param expanded default expanded state on first use (before any pref is saved)
+     * @param prefKey  preference key that remembers the expanded state; **null = not persisted** (always falls back to [expanded]).
+     *                 Without a key, closing the section and returning later re-expands it - which was the old problem on the "about" page:
+     *                 state lived only in the in-memory `open` variable.
      */
 
 
-    /** 关于页的可点击链接（点开系统浏览器） */
+    /** Clickable link on the about page (opens the system browser) */
 
 
-    // ---- 底部导航 ----
+    // ---- Bottom navigation ----
 
     override fun buildBottomNav(): View = shellController.buildBottomNav()
 
@@ -1200,9 +1200,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         tabDownload.visibility = if (index == 3) View.VISIBLE else View.GONE
         tabGallery.visibility = if (index == 4) View.VISIBLE else View.GONE
         tabSettings.visibility = if (index == 5) View.VISIBLE else View.GONE
-        // 切到「模型」页时刷新绘图模型 / LoRA 列表，避免导入后状态滞后
+        // When switching to the models page, refresh the draw model / LoRA lists so state isn't stale after import
         if (index == 1) { refreshDrawModelsInternal(); refreshLoraUi(); refreshTaggerUi(); refreshApiUi(); refreshDrawApiUi() }
-        // 切到下载页时刷新列表
+        // Refresh the list when switching to the downloads page
         if (index == 3) { downloadPage?.refresh() }
         if (index == 4) { galleryPage?.refresh() }
         inputBar.visibility = if (index == 0) View.VISIBLE else View.GONE
@@ -1217,7 +1217,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         if (index == 0) chatScrollManager?.scrollToBottom()
     }
 
-    // ---- 左侧对话抽屉 ----
+    // ---- Left chat drawer ----
 
     override fun buildDrawer(rootFrame: FrameLayout) {
         drawerMask = View(this).apply {
@@ -1333,7 +1333,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
 
-    // ================= 聊天发图（.litertlm 多模态） =================
+    // ================= Chat image sending (.litertlm multimodal) =================
     // Lógica de adjuntos extraída a AttachController.kt; delegación de compatibilidad.
     override fun probeVision(path: String): Boolean = attachController.probeVision(path)
 
@@ -1354,10 +1354,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         if (attachController.onStoragePermissionResult(requestCode, grantResults)) return
     }
 
-    /** Bitmap → JPEG 字节（extraído a AttachController）。 */
+    /** Bitmap -> JPEG bytes (extracted to AttachController). */
     private fun bitmapToJpeg(bmp: Bitmap, quality: Int = 88): ByteArray = attachController.bitmapToJpeg(bmp, quality)
 
-    /** 用户发的图片也落盘（JPEG），随会话一起恢复。 */
+    /** Persist user-sent images (JPEG) to disk, restored with the session. */
     internal fun writeChatJpeg(bmp: Bitmap, name: String): Boolean = try {
         val dir = File(filesDir, "chatimg").apply { mkdirs() }
         File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
@@ -1366,8 +1366,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         false
     }
 
-    /** 把待发文件的原始内容编码成 JSON 存进轮次，供「重新生成」还原附件 */
-    /** 安装/更新时间（用来确认装的是哪一版） */
+    /** Encode pending file contents as JSON into the turn, so "regenerate" can restore the attachments */
+    /** Install/update time (used to confirm which build is installed) */
     override fun appVersion(): String = try {
         packageManager.getPackageInfo(packageName, 0).versionName ?: ""
     } catch (_: Throwable) {
@@ -1383,10 +1383,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     /**
-     * 估算 LiteRT 会话的输入 token：系统提示 + 历史 + 本轮要发的内容。
-     * 历史里之前发过的文件正文也还留在引擎的上下文里，所以一并算上。
+     * Estimate LiteRT session input tokens: system prompt + history + this round's content.
+     * File text sent in earlier rounds also stays in the engine's context, so include it.
      */
-    /** 判断是不是「上下文塞不下」这类错误（LiteRT Status Code 3 / llama.cpp 的 context 满） */
+    /** Detect "context overflow" errors (LiteRT status code 3 / llama.cpp context full) */
     internal fun isContextOverflow(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()
         return m.contains("too long") || m.contains("maximum number of tokens") ||
@@ -1394,12 +1394,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             (m.contains("context") && (m.contains("full") || m.contains("exceed")))
     }
 
-    // ================= 对话模型参数（模型页可调） =================
+    // ================= Chat model params (adjustable on the models page) =================
 
-    /** 通用 SharedPreferences（chat/UI/API 设置共用） */
+    /** Shared SharedPreferences (shared by chat / UI / API settings) */
     override fun chatPrefs() = getSharedPreferences("ponko", MODE_PRIVATE)
 
-    /** 模型页输入即存盘（存到当前模型名下）；空值/非法值回落到默认 */
+    /** Save on models-page input (stored under the current model name); blank/invalid values fall back to defaults */
     private fun saveChatParams() {
         if (chatParams.uiLoading) return
         fun i(ed: EditText?, def: Int) = ed?.text?.toString()?.trim()?.toIntOrNull() ?: def
@@ -1416,7 +1416,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         )
     }
 
-    /** 把当前模型的参数回填到模型页的输入框（建界面 / 切模型时调） */
+    /** Backfill the current model's params into the models page inputs (called on UI build / model switch) */
     private fun loadChatParamsIntoUiInternal() {
         chatParams.setUiLoading(true)
         chatCtxEdit?.setText(chatParams.ctx().toString())
@@ -1433,7 +1433,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             if (n == null) getString(R.string.s_319) else getString(R.string.s_318, n)
     }
 
-    /** 把当前模型的参数恢复成内置默认值（上下文等要重新加载模型才生效） */
+    /** Reset the current model's params to built-in defaults (context etc. only take effect after reloading the model) */
     private fun resetChatParams() {
         chatParams.setUiLoading(true)
         chatParams.resetDefaults()
@@ -1442,7 +1442,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         toast(getString(R.string.s_317))
     }
 
-    /** 参数格：小标题 + 数字输入 + 说明；keep 用来把输入框存进字段 */
+    /** Param cell: sub-label + numeric input + hint; keep stores the input into the field */
     private fun numField(label: String, def: String, hint: String, keep: (EditText) -> Unit): LinearLayout =
         UiHelpers.numField(
             context = this,
@@ -1455,7 +1455,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             ui = ui,
         )
 
-    /** 一行放两格参数 */
+    /** Two param cells in one row */
     private fun twoCols(a: View, b: View): LinearLayout =
         UiHelpers.twoCols(context = this, first = a, second = b)
 
@@ -1472,7 +1472,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     private fun pickModelFile() = drawModelsController.pickModelFile()
 
-    /** gguf 多模态：选一个 mmproj（视觉投影）文件，.gguf */
+    /** GGUF multimodal: pick an mmproj (vision projection) file, .gguf */
     // pickMmprojFile / copyMmprojToPrivate / refreshMmprojUi / mmprojChip / confirmDeleteMmproj
     // → extraídos a VisionManager
 
@@ -1544,7 +1544,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
                 setStatus(getString(R.string.s_161), C_OK)
                 if (set != null && set.kind == "multi" && slot == null) {
                     toast(getString(R.string.s_370))
-                    // 新导入的多文件主模型：自动把槽位面板展开，方便接着补配套文件
+                    // Newly imported multi-file main model: auto-expand the slot panel so companion files can be added
                     drawSlotsExpandedInternal = true
                 } else {
                     toast(getString(R.string.s_091))
@@ -1609,9 +1609,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     private fun refreshSavedModels() = drawModelsController.refreshSavedModels()
 
-    // ================= 已复制的绘图模型 =================
+    // ================= Copied draw models =================
 
-    /** 绘图模型的二合一按钮：未加载 → 加载；已加载 → 卸载。 */
+    /** Combined draw model button: unloaded -> load; loaded -> unload. */
     private fun onDrawToggleClick() {
         val dpg = drawPageInternal
         if (dpg == null) {
@@ -1625,7 +1625,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             setStatus(getString(R.string.s_116), C_IDLE)
             toast(getString(R.string.s_160))
             refreshDrawToggleInternal()
-            refreshDrawApiUi()   // 模型卸载了，绘图接口那边要变回「尚未加载绘图模型」
+            refreshDrawApiUi()   // Model unloaded; the draw API block must revert to "draw model not loaded"
             return
         }
         if (!dpg.hasModel()) {
@@ -1652,8 +1652,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    /** 按「绘图模型是否已加载」更新二合一按钮的文案与配色。
-     *  与对话模型保持一致：加载=蓝色实心；已加载=浅灰描边（避免误以为还是主操作）。 */
+    /** Update the combined button's label and colors based on whether the draw model is loaded.
+     *  Consistent with the chat model: loading = solid blue; loaded = light gray outline (so it isn't mistaken for the primary action). */
     private fun refreshDrawToggleInternal() {
         val b = drawToggleBtn ?: return
         if (drawPageInternal?.isReady() == true) {
@@ -1668,7 +1668,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
     }
 
-    /** 列出已有的绘图模型集（点击选用 · 长按删除）。单文件与多文件都在这。 */
+    /** List existing draw model sets (tap to select . long-press to delete). Single- and multi-file sets are both here. */
     private fun refreshDrawModelsInternal() {
         refreshDrawToggleInternal()
         val box = drawSavedContainer ?: return
@@ -1694,7 +1694,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         for (s in sets) {
             val isSel = s.id == activeId || s.id == drawSetIdInternal
             val chip = TextView(this).apply {
-                // 列表样式与旧版一致：文件名 + 角色 + 量化 + 体积（多文件集只多一个标记，不做分类/家族展示）
+                // List styling matches the old version: filename + role + quantization + size (multi-file sets just add one tag; no categorization/family display)
                 val isMain = loadedName != null && dpg?.isReady() == true && loadedName == s.name
                 val role = if (isMain) getString(R.string.s_099)
                 else if (s.kind == DrawPage.KIND_MULTI) getString(R.string.s_346)
@@ -1760,47 +1760,47 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
 
-    // ---- 多对话管理 ----
+    // ---- Multi-session management ----
 
-    /** 新建一个对话（旧对话保留在列表中）。 */
+    /** Create a new session (old sessions stay in the list). */
     private fun newSession() = chatSessionController.newSession()
 
     private fun switchTo(s: ChatSession) = chatSessionController.switchTo(s)
 
     private fun confirmDeleteSession(s: ChatSession) = chatSessionController.confirmDeleteSession(s)
 
-    // ---- 会话切换/重建 ----
+    // ---- Session switch / rebuild ----
 
     /**
-     * GGUF 推理参数：带上对话历史 + cache_prompt(true) + 固定 slot。
-     * llama.cpp 会把本轮 prompt 与 slot 里已缓存的 KV 做前缀匹配，只计算新增部分 ——
-     * 这是长对话不重复 prefill 的关键。
+     * GGUF inference params: include chat history + cache_prompt(true) + fixed slot.
+     * llama.cpp matches this round's prompt against the cached KV prefix in the slot, computing only the new part -
+     * this is what keeps long conversations from re-prefilling.
      */
     // buildInferenceParams / buildMultimodalParams / configFor → InferenceParamsBuilder
 
     // buildInferenceParams / buildMultimodalParams / configFor → InferenceParamsBuilder
 
     /**
-     * 思考开关变化后重建会话。
-     * LiteRT-LM 的思考标记是在会话创建时写入提示模板的，
-     * 会话跑起来后仅改 per-call 的 ThinkingConfig 不会生效（尤其是 关→开），
-     * 所以必须按新模式重建会话；历史通过 initialMessages 保留。
+     * Rebuild the session after the thinking toggle changes.
+     * LiteRT-LM's thinking marker is written into the prompt template at session creation;
+     * once the session is running, changing only the per-call ThinkingConfig has no effect (especially off->on),
+     * so the session must be rebuilt for the new mode; history is kept via initialMessages.
      */
     internal fun rebuildConversation(silent: Boolean = false, dropLast: Boolean = false) = chatSessionController.rebuildConversation(silent, dropLast)
 
-    /** 重建 LiteRT 会话（若模型已加载）并把聊天区重绘为当前对话的内容。 */
+    /** Rebuild the LiteRT session (if the model is loaded) and re-render the chat area with the current session's content. */
     private fun restoreSession(showHint: Boolean = true) = chatSessionController.restoreSession(showHint)
 
     /**
-     * 重新生成某一轮的回答。
-     * 该轮之后的轮次依赖这轮的上下文，必须一并丢弃；然后把它重新送进去生成。
+     * Regenerate a given round's answer.
+     * Later rounds depend on this round's context, so they must be dropped too; then the round is re-fed for generation.
      */
     internal fun regenerate(turn: QaTurn) = chatSessionController.regenerate(turn)
 
-    /** 把一轮已有问答重绘到聊天区（历史回填）。 */
-    /** 绘图模式下思考开关无意义（不经过对话模型），置灰禁用 */
+    /** Re-render an existing Q&A round into the chat area (history backfill). */
+    /** The thinking toggle is meaningless in draw mode (no chat model involved); gray it out and disable it */
     override fun updateThinkEnabled() {
-        // 可能由 IO 线程上的回调触发；setEnabled 会驱动 Ripple 动画，必须回主线程
+        // May be triggered by a callback on the IO thread; setEnabled drives a ripple animation, so it must go back to the main thread
         runOnUiThread {
             val visible = modelSupportsThinking
             val enabled = visible && !drawMode
@@ -1832,15 +1832,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     private fun renderTurn(t: QaTurn) = chatSessionController.renderTurn(t)
 
-        // ---- 持久化 ----
+    // ---- Persistence ----
 
-    // ---- 持久化 ----
+    // ---- Persistence ----
 
     internal fun doDrawFromChat(prompt: String, dpg: DrawPage) {
         chatSessionController.doDrawFromChat(prompt, dpg)
     }
 
-    /** 把图片写进应用私有目录，返回是否成功 */
+    /** Write an image to the app's private dir; returns whether it succeeded */
     private fun writeChatImage(bmp: Bitmap, name: String): Boolean = try {
         val dir = File(filesDir, "chatimg").apply { mkdirs() }
         File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -1855,8 +1855,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         null
     }
 
-    /** 在 AI 气泡里插入图片；点图弹确认框再存相册（以前点一下就存，容易误触） */
-    /** 全屏看图：双指缩放、拖动、双击放大；未放大时点图关闭，右上角 ✕ 随时关闭。 */
+    /** Insert an image into the AI bubble; tapping it shows a confirm dialog before saving to the gallery (previously a single tap saved, easy to mis-trigger) */
+    /** Full-screen image view: two-finger zoom, drag, double-tap to zoom; tap to close when not zoomed, X top-right closes anytime. */
     private fun showImageFullscreen(bmp: Bitmap) {
         val dlg = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val iv = ZoomImageView(this).apply { setImageBitmap(bmp) }
@@ -1884,7 +1884,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         dlg.show()
     }
 
-    /** 图片长按菜单：保存到相册 / 引用 / 发送至图生图 / 发送至 Tagger。 */
+    /** Image long-press menu: save to gallery / quote / send to image-to-image / send to Tagger. */
     private fun showImageMenu(bmp: Bitmap, name: String) {
         val items = arrayOf(
             getString(R.string.s_045),
@@ -1906,7 +1906,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             .show()
     }
 
-    /** 引用：把图片直接放进输入栏待发送附件（不落盘，等同于在输入栏选了这张图）。 */
+    /** Quote: put the image directly into the input bar as a pending attachment (not persisted; same as selecting it from the input bar). */
     private fun quoteImage(bmp: Bitmap) {
         if (engine == null && llamaModel == null) { toast(getString(R.string.s_273)); return }
         if (!visionOk) { toast(getString(R.string.s_272)); return }
@@ -1973,12 +1973,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     internal fun extractText(m: Message): String = chatSessionController.extractText(m)
 
     /**
-     * LiteRT 的流式片段语义在版本间不完全一致（可能是增量片段，也可能带累积内容）。
-     * 统一兼容，避免出现「您好，有什么可以帮你？」被反复拼接的情况：
-     *   - 与已累积内容完全相同     → 重复快照，丢弃
-     *   - 新片段以已累积内容开头   → 全量快照，用新片段替换
-     *   - 已累积内容以新片段结尾   → 尾部重复片段，丢弃（忽略首尾空白）
-     *   - 其余                     → 按增量追加
+     * LiteRT's streaming fragment semantics vary across versions (may be incremental or cumulative).
+     * Normalize to avoid cases like a repeated greeting being concatenated over and over:
+     *   - identical to accumulated content → duplicate snapshot, discard
+     *   new fragment starts with accumulated content → full snapshot, replace with the new fragment
+     *   accumulated content ends with the new fragment → trailing duplicate, discard (ignore leading/trailing whitespace)
+     *   - otherwise → append as an increment
      */
     internal fun mergeStreamDelta(cur: String, delta: String): String = chatSessionController.mergeStreamDelta(cur, delta)
 
@@ -1995,7 +1995,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     override fun applyBusy(b: Boolean) = chatSessionController.applyBusy(b)
 
-    /** 导入/复制期间禁用「绘图模型」区的按钮，避免重复触发。 */
+    /** Disable the draw-model area's buttons during import/copy to prevent duplicate triggers. */
     override fun setDrawBusy(b: Boolean) {
         drawToggleBtn?.isEnabled = !b
         drawToggleBtn?.alpha = if (b) 0.5f else 1f
@@ -2009,7 +2009,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         taggerLoadBtnInternal?.alpha = if (b) 0.5f else 1f
     }
 
-    /** 忙碌时禁用「对话模型」区域的加载按钮。 */
+    /** Disable the load button in the "chat model" area while busy. */
     private fun setMainBusy(b: Boolean) {
         loadButton.isEnabled = !b
         loadButton.alpha = if (b) 0.5f else 1f

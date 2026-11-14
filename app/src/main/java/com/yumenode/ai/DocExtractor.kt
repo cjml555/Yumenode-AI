@@ -10,43 +10,46 @@ import java.util.zip.ZipFile
 import kotlin.math.min
 
 /**
- * 文档正文抽取：把 docx / pptx / xlsx / odt / ods / odp / epub / rtf / html / pdf 里的**文字**抠出来，
- * 交给对话当上下文用（图片、版式、批注、修订记录一律不管）。
+ * Document text extraction: pulls **text** out of docx / pptx / xlsx / odt / ods / odp / epub / rtf / html / pdf
+ * to feed the chat as context (images, layout, comments, revision history all ignored).
  *
- * 两条实现路线：
- * - **zip 家族**（OOXML / ODF / EPUB）：JDK 自带 zip + XmlPullParser 逐标签读文本，零依赖；
- * - **PDF**：交给 pdfbox-android（用户发 PDF 的场景最多，自己写解析器不划算，字体编码 / CMap 太容易踩坑）；
- * - **97-2003 老格式**（.doc / .xls / .ppt）是 OLE 复合二进制，解析成本极高、收益极低 → 只提示另存为 docx / pdf。
+ * Two implementation routes:
+ * - **zip family** (OOXML / ODF / EPUB): JDK's built-in zip + XmlPullParser reading tags, zero dependencies;
+ * - **PDF**: delegated to pdfbox-android (most common user scenario; writing our own parser isn't worth it,
+ *   font encoding / CMap are too easy to trip over);
+ * - **97-2003 legacy formats** (.doc / .xls / .ppt) are OLE compound binaries — parsing cost is extreme,
+ *   payoff minimal → only prompts to re-save as docx / pdf.
  *
- * 所有解析都包在 runCatching 里：坏文件返回 null 由调用方给文案，绝不冒泡崩到界面。
+ * All parsing is wrapped in runCatching: bad files return null and the caller supplies the message,
+ * never bubbling up to crash the UI.
  */
 object DocExtractor {
 
-    /** zip 家族：解压后读 XML 就行 */
+    /** zip family: just unzip and read XML */
     val ZIP_DOCS = setOf("docx", "pptx", "xlsx", "odt", "ods", "odp", "epub")
 
-    /** 单文件文本型（rtf / html） */
+    /** Single-file text types (rtf / html) */
     val TEXT_DOCS = setOf("rtf", "html", "htm", "xhtml")
 
-    /** 97-2003 老二进制 Office：只能提示另存 */
+    /** 97-2003 legacy binary Office: can only prompt to re-save */
     val LEGACY_DOCS = setOf("doc", "xls", "ppt")
 
-    /** 本类认识的扩展名（不含 .txt/.md/.csv 这类，那些走原来的纯文本路径） */
+    /** Extensions this class understands (excludes .txt/.md/.csv etc., those go through the original plain-text path) */
     val ALL: Set<String> = ZIP_DOCS + TEXT_DOCS + LEGACY_DOCS + setOf("pdf")
 
-    /** zip / pdf 允许的原始字节上限 */
+    /** Raw byte cap for zip / pdf */
     const val MAX_DOC_BYTES = 48L * 1024 * 1024
 
-    /** rtf / html 没压缩，别让用户塞进几十 MB */
+    /** rtf / html aren't compressed — don't let the user stuff tens of MB in */
     private const val MAX_TEXT_DOC_BYTES = 8L * 1024 * 1024
 
-    /** PDF 最多解析前多少页（再多抽出来也远超本地模型上下文） */
+    /** Max pages to parse from PDF (more than that is far beyond local model context anyway) */
     private const val MAX_PDF_PAGES = 60
 
     /**
-     * 抽取结果。
-     * @param units 结构单位数量（页 / 幻灯片 / 工作表），0 = 没有这个概念
-     * @param unitRes 单位文案的资源 id（R.string.s_386 页 / s_387 幻灯片 / s_388 工作表）
+     * Extraction result.
+     * @param units Count of structural units (pages / slides / sheets); 0 = no such concept
+     * @param unitRes Resource id for the unit label (R.string.s_386 pages / s_387 slides / s_388 sheets)
      */
     class Ok(val text: String, val units: Int = 0, val unitRes: Int = 0)
 
@@ -66,7 +69,7 @@ object DocExtractor {
         }
     }.getOrNull()?.takeIf { it.text.isNotBlank() }
 
-    // ==================== zip 家族 ====================
+    // ==================== zip family ====================
 
     private fun readWord(file: File): Ok? = withZip(file) { z ->
         val entry = z.getEntry("word/document.xml") ?: return@withZip null
@@ -84,7 +87,7 @@ object DocExtractor {
     }
 
     private fun readPptx(file: File): Ok? = withZip(file) { z ->
-        // slide1, slide2 … slide10 要按数字排，不能按字符串排
+        // slide1, slide2 … slide10 must be sorted numerically, not lexicographically
         val slides = z.entries().toList()
             .filter { it.name.startsWith("ppt/slides/slide") && it.name.endsWith(".xml") }
             .sortedBy { it.name.filter(Char::isDigit).toIntOrNull() ?: 0 }
@@ -104,7 +107,7 @@ object DocExtractor {
         Ok(clean(sb.toString()), slides.size, R.string.s_387)
     }
 
-    /** xlsx：先读共享字符串表，再把每张工作表的单元格按行拼出来（制表符分列） */
+    /** xlsx: read shared string table first, then assemble each sheet's cells row by row (tab-separated) */
     private fun readXlsx(file: File): Ok? = withZip(file) { z ->
         val shared = ArrayList<String>()
         z.getEntry("xl/sharedStrings.xml")?.let { e ->
@@ -163,7 +166,7 @@ object DocExtractor {
         Ok(clean(sb.toString()), sheets.size, R.string.s_388)
     }
 
-    /** ODF（odt / ods / odp）：content.xml 里 text:p / text:h 就是段落 */
+    /** ODF (odt / ods / odp): text:p / text:h in content.xml are the paragraphs */
     private fun readOdf(file: File): Ok? = withZip(file) { z ->
         val entry = z.getEntry("content.xml") ?: return@withZip null
         val sb = StringBuilder()
@@ -196,18 +199,19 @@ object DocExtractor {
     private inline fun <T> withZip(file: File, block: (ZipFile) -> T?): T? =
         runCatching { ZipFile(file).use { block(it) } }.getOrNull()
 
-    // ==================== XML 遍历 ====================
+    // ==================== XML traversal ====================
 
     /**
-     * 极简 XML 遍历：每个事件回调一次。`name` 是当前标签名，`p` 是解析器（要读属性时用）。
+     * Minimal XML traversal: one callback per event. `name` is the current tag name, `p` the parser
+     * (use it to read attributes).
      *
-     * TEXT 事件里 XmlPullParser 不告诉你所属标签，所以这里维护一个「最近的未闭合开始标签」，
-     * 遇到 TEXT 时把它当父标签用——对本项目要读的这几种 XML 足够准。
+     * TEXT events don't tell you the owning tag, so this maintains a "most recent unclosed start tag"
+     * and uses it as the parent on TEXT — accurate enough for the XML this project reads.
      */
     private inline fun walkXml(ins: InputStream, crossinline onEvent: (Int, String, String, XmlPullParser) -> Unit) {
         val p = Xml.newPullParser()
-        // 必须开命名空间处理：开了之后 name 才是「本地名」（w:t -> t、table:table-cell -> table-cell），
-        // 关掉的话拿到的是带前缀的限定名，下面所有按标签名判断的分支都会失效。
+        // Must enable namespace processing: with it on, name is the "local name" (w:t -> t, table:table-cell -> table-cell);
+        // off, you'd get the qualified prefixed name and every tag-name branch below would break.
         p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
         p.setInput(ins, null)
         var ev = p.eventType
@@ -231,7 +235,7 @@ object DocExtractor {
 
     // ==================== RTF / HTML ====================
 
-    /** RTF：只保留可见文本，跳过字体表 / 颜色表等控制组；按 \ansicpgN 决定 \'hh 的编码 */
+    /** RTF: keep only visible text, skip control groups like font table / color table; use \ansicpgN decide encoding */
     private fun stripRtf(src: String): String {
         val out = StringBuilder()
         var i = 0
@@ -274,7 +278,7 @@ object DocExtractor {
                                 while (k < src.length && (src[k] == '-' || src[k].isDigit())) k++
                             }
                             val param = if (k > j) src.substring(j, k).toIntOrNull() else null
-                            if (k < src.length && src[k] == ' ') k++   // 控制字后的单个空格是分隔符
+                            if (k < src.length && src[k] == ' ') k++   // single space after control word is a separator
                             if (skipDepth < 0) {
                                 when (word) {
                                     "par", "line", "sect", "page" -> { flushPending(); out.append('\n') }
@@ -284,7 +288,7 @@ object DocExtractor {
                                         flushPending()
                                         val code = if (param < 0) param + 65536 else param
                                         out.append(code.toChar())
-                                        // \uN 后面那个字符是「不支持时的替代」，吃掉
+                                        // the char after \uN is a "fallback for unsupported", consume it
                                         if (k < src.length && src[k] != '\\' && src[k] != '{' && src[k] != '}') k++
                                     }
                                     "fonttbl", "colortbl", "stylesheet", "info", "generator", "listtable",
@@ -306,7 +310,7 @@ object DocExtractor {
         return out.toString()
     }
 
-    /** HTML/XHTML：去掉脚本样式与标签，实体做基本还原 */
+    /** HTML/XHTML: strip scripts/style and tags, restore basic entities */
     private fun htmlToText(html: String): String {
         var s = html
         s = s.replace(Regex("(?is)<(script|style|head)[^>]*>.*?</\\1>"), " ")
@@ -339,9 +343,9 @@ object DocExtractor {
         }
     }.getOrNull()
 
-    // ==================== 清理 ====================
+    // ==================== Cleanup ====================
 
-    /** 去掉零宽字符与多余空行，行尾空格也清掉——本地模型对这些噪声很敏感 */
+    /** Strips zero-width chars and extra blank lines, also trims trailing spaces — local models are sensitive to this noise */
     private fun clean(s: String): String = s
         .replace('\u0000', ' ')
         .replace("\uFEFF", "")

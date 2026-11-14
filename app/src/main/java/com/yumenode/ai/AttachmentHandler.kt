@@ -19,10 +19,10 @@ import org.json.JSONArray
 import java.io.File
 
 /**
- * AttachmentHandler — 集中处理图片与文本文件的读取、存储与预览逻辑。
+ * AttachmentHandler — centralizes reading, storing and previewing images and text files.
  *
- * 抽取自 MainActivity 以清理 God Object (5654+ 行)。
- * MainActivity 通过 `attachmentHandler` 一次获取全部附件能力。
+ * Extracted from MainActivity to break up the God Object (5654+ lines).
+ * MainActivity gets all attachment capabilities through `attachmentHandler`.
  */
 class AttachmentHandler private constructor(
     private val context: Context,
@@ -30,7 +30,7 @@ class AttachmentHandler private constructor(
 ) {
 
     // ──────────────────────────────────────────────
-    //  常量（公开供 MainActivity 引用）
+    //  Constants (public for MainActivity)
     // ──────────────────────────────────────────────
     companion object {
         const val REQ_PICK_CHAT_IMAGE = 1007
@@ -46,15 +46,15 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  数据类
+    //  Data classes
     // ──────────────────────────────────────────────
-    /** 图片待发送项（供 MainActivity 引用） */
+    /** Pending image (public for MainActivity) */
     data class PendingImage(
         val bmp: Bitmap,
         val jpeg: ByteArray
     )
 
-    /** 文本文件待发送项（供 MainActivity 引用） */
+    /** Pending text file (public for MainActivity) */
     data class PendingFile(
         val name: String,
         val bytes: Long,
@@ -63,20 +63,20 @@ class AttachmentHandler private constructor(
         val detail: String? = null
     )
 
-    /** 文件读取结果（供 MainActivity 引用） */
+    /** File read result (public for MainActivity) */
     data class FileRead(
         val file: PendingFile?,
         val error: String?
     )
 
     // ──────────────────────────────────────────────
-    //  内部状态
+    //  Internal state
     // ──────────────────────────────────────────────
     private val pendingImages = mutableListOf<PendingImage>()
     private val pendingFiles = mutableListOf<PendingFile>()
 
     // ──────────────────────────────────────────────
-    //  UI 辅助
+    //  UI helpers
     // ──────────────────────────────────────────────
     private var attachPreviewStrip: HorizontalScrollView? = null
     private var attachPreviewBox: LinearLayout? = null
@@ -87,7 +87,7 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  文件读写辅助
+    //  File IO helpers
     // ──────────────────────────────────────────────
     fun readAllCapped(ins: java.io.InputStream, cap: Int): ByteArray? =
         FileManager.readAllCapped(ins, cap)
@@ -101,7 +101,7 @@ class AttachmentHandler private constructor(
         FileManager.queryDisplayName(uri, activity.contentResolver)
 
     // ──────────────────────────────────────────────
-    //  图片操作（对外 public）
+    //  Image operations (public API)
     // ──────────────────────────────────────────────
     fun pickChatImage() {
         activity.startActivityForResult(
@@ -178,7 +178,7 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  文本/文档文件操作（对外 public）
+    //  Text/document file operations (public API)
     // ──────────────────────────────────────────────
     fun readTextFile(uri: Uri): FileRead {
         val name = queryDisplayName(uri) ?: "file.txt"
@@ -270,7 +270,7 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  附件预览构建（UI 层，需 MainActivity 注入 attachViews）
+    //  Attachment preview building (UI layer; MainActivity injects attachViews)
     // ──────────────────────────────────────────────
     fun rebuildAttachPreview() {
         val strip = attachPreviewStrip ?: return
@@ -335,7 +335,7 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  附件还原（对外 public）
+    //  Attachment restore (public API)
     // ──────────────────────────────────────────────
     fun restoreFiles(store: String?): Int {
         if (store.isNullOrEmpty()) return 0
@@ -361,7 +361,7 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  Token 估算（私有）
+    //  Token estimation (private)
     // ──────────────────────────────────────────────
     /** Recorta texto para no exceder maxTokens. Delegado en [ContextBudget]. */
     private fun fitTokens(text: String, maxTokens: Int): String =
@@ -373,13 +373,13 @@ class AttachmentHandler private constructor(
     }
 
     // ──────────────────────────────────────────────
-    //  便捷 API（对外 public，供 MainActivity 引用）
+    //  Convenience API (public, for MainActivity)
     // ──────────────────────────────────────────────
     fun getPendingImages(): List<PendingImage> = pendingImages.toList()
     fun getPendingFiles(): List<PendingFile> = pendingFiles.toList()
 
     // ──────────────────────────────────────────────
-    //  内部工具
+    //  Internal utilities
     // ──────────────────────────────────────────────
     fun getString(resId: Int): String = activity.getString(resId)
 }

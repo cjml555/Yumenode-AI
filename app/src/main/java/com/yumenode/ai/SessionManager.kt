@@ -42,7 +42,7 @@ class SessionManager(private val context: Context) {
                                     userImage = t.nextLine("uimg").ifEmpty { null },
                                     userFile = t.nextLine("ufile").ifEmpty { null },
                                 )
-                                // 文件正文也读回来，这样重启后「重新生成」也能带上文件
+                                // Read the file body back too, so "regenerate" still carries the file after a restart
                                 turn.fileText = t.nextLine("utext").ifEmpty { null }
                                 turn.fileStore = t.nextLine("fstore").ifEmpty { null }
                                 s.turns.add(turn)

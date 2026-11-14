@@ -39,13 +39,13 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
 
     private val activity get() = host.activity
 
-    /** 拍照时预创建的 MediaStore URI */
+    /** MediaStore URI precreated when taking a photo */
     private var pendingCameraUri: Uri? = null
 
-    /** 安卓 9 及以下等拿到存储权限后再执行的动作（仅这些机型用得到） */
+    /** Action to run after Android 9 and below grant storage permission (only usable on such devices) */
     private var pendingStorageAction: (() -> Unit)? = null
 
-    /** 探测 .litertlm 模型是否支持图像输入；任何异常都按「不支持」处理。 */
+    /** Probe whether the .litertlm model supports image input; any error means "unsupported" */
     fun probeVision(path: String): Boolean = try {
         ModelInfo.from(path).use { it.inputModalities().vision }
     } catch (_: Throwable) {
@@ -53,13 +53,13 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
     }
 
     fun onAttachClick() {
-        // 生成过程中也允许先把附件备好（发送仍会被 busy 拦住）
-        // 注意：这里只管「模型加载了没」——文本文件任何模型都能读，不该被「必须多模态」挡住
+        // Attachments may be staged while generation runs (sending is still blocked by busy)
+        // Note: only checks whether the model loaded -- text files are readable by any model and should not be gated by "multi-modal" requirement
         if (!host.hasModel) { host.toast(activity.getString(R.string.s_273)); return }
         showAttachDrawer()
     }
 
-    /** 「＋」抽屉：贴着输入栏向上展开，可选拍照 / 图库。 */
+    /** "+" drawer: slides up from the input bar, optionally offering photo / gallery pick */
     private fun showAttachDrawer() {
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -67,7 +67,7 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
             elevation = activity.dp(8).toFloat()
             setPadding(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
         }
-        // 外面再套一层留 8dp 余量：给阴影和缩放动画留空间，避免被弹窗边界裁掉
+        // Add a 8dp outer margin to leave room for shadow + scaling animation, avoiding popup boundary clipping
         val outer = FrameLayout(activity).apply {
             setPadding(activity.dp(8), activity.dp(8), activity.dp(8), activity.dp(8))
             addView(box, FrameLayout.LayoutParams(
@@ -88,11 +88,11 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
 
         val popup = PopupWindow(outer, activity.dp(150) + activity.dp(16), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
             isOutsideTouchable = true
-            // 透明背景：真正的外观画在 box 上，这样手动缩放动画才不会被窗口背景挡住
+            // Draw on a transparent background so manual scale animation is not blocked by the window background
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         }
 
-        // 收起：先播完动画再 dismiss
+        // Dismiss: run the animation first, then dismiss
         fun close(action: () -> Unit) {
             box.animate().alpha(0f).scaleY(0.75f)
                 .setDuration(120)
@@ -108,7 +108,7 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
         box.addView(mkItem("🖼", activity.getString(R.string.s_271)) { close { host.attachmentHandler.pickChatImage() } }, activity.matchWrap())
         box.addView(mkItem("📄", activity.getString(R.string.s_295)) { close { host.attachmentHandler.pickChatFile() } }, activity.matchWrap())
 
-        // 先手动量一次，在 show 之前就把动画初值设好（否则会闪一帧全尺寸）
+        // Measure once before show and set the animation start value (avoid a full-size frame flash)
         box.measure(
             View.MeasureSpec.makeMeasureSpec(activity.dp(150), View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -117,7 +117,7 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
         box.alpha = 0f
         box.scaleY = 0.72f
 
-        // 向上展开：弹窗底边贴在输入栏上沿
+        // Slide up: the popup bottom edge aligns with the input bar
         val loc = IntArray(2)
         host.inputBar.getLocationOnScreen(loc)
         val screenH = activity.resources.displayMetrics.heightPixels
@@ -125,14 +125,14 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
             host.inputBar, Gravity.BOTTOM or Gravity.END, activity.dp(10) - activity.dp(8), screenH - loc[1] + activity.dp(6)
         )
 
-        // 入场动画：从底部往上长出来 + 淡入（不依赖 PopupWindow 的系统窗口动画）
+        // Entrance animation: grows up from bottom + fade in (does not depend on system window animations)
         box.animate().alpha(1f).scaleY(1f)
             .setDuration(200)
             .setInterpolator(DecelerateInterpolator())
             .start()
     }
 
-    /** 安卓 9 及以下写相册/拍照需要运行时 WRITE_EXTERNAL_STORAGE；安卓 10+ 走 MediaStore，免权限，直接执行。 */
+    /** Android 9 and below need runtime WRITE_EXTERNAL_STORAGE for writing albums/photos; Android 10+ uses MediaStore with no permission needed, then executes directly. */
     fun withLegacyStorage(action: () -> Unit) {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P ||
             activity.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
@@ -182,7 +182,7 @@ class AttachController(private val host: AttachHost) : ThemeAliases {
         }
     }
 
-    /** Bitmap → JPEG 字节（作为 Content.ImageBytes 送给 LiteRT-LM）。 */
+    /** Bitmap -> JPEG bytes (sent to LiteRT-LM as Content.ImageBytes). */
     fun bitmapToJpeg(bmp: Bitmap, quality: Int = 88): ByteArray {
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
