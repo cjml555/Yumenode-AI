@@ -609,4 +609,5 @@
     <string name="s_576">Count (1–10)</string>
     <string name="s_577">How many images to generate?</string>
     <string name="s_578">Invalid count, use 1–10</string>
+    <string name="s_579">Advanced benchmark</string>
     </resources>

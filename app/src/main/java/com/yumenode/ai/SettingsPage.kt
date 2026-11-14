@@ -441,6 +441,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(customBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Advanced benchmark (CSV export)
+        if (FeatureToggleManager.isPremium) {
+            val benchBtn = host.ui.actionButton(getString(R.string.s_579)) { exportAdvancedBenchmark() }
+            aboutBody.addView(benchBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -457,6 +463,21 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         val file = File(host.activity.getExternalFilesDir(null), "sessions_export_${System.currentTimeMillis()}.json")
         file.writeText(data)
         host.toast("Sessions exported to ${file.absolutePath}")
+    }
+
+    /** Premium: advanced benchmark — export detailed CSV to external files dir. */
+    private fun exportAdvancedBenchmark() {
+        val bench = (host as? BenchmarkHost)?.lastBench
+        if (bench == null) {
+            host.toast("No benchmark data. Run benchmark first.")
+            return
+        }
+        val csv = StringBuilder()
+        csv.appendLine("timestamp,model,backend,device,soc,tps_avg,tps_min,tps_max,lat_min_ms,lat_max_ms,tokens_per_run")
+        csv.appendLine("${System.currentTimeMillis()},${bench.model},${bench.backend},${bench.device},${bench.soc},${bench.tpsAvg},${bench.tpsMin},${bench.tpsMax},${bench.latMin},${bench.latMax},${bench.tokens}")
+        val file = File(host.activity.getExternalFilesDir(null), "benchmark_${System.currentTimeMillis()}.csv")
+        file.writeText(csv.toString())
+        host.toast("Benchmark CSV exported to ${file.absolutePath}")
     }
 
     /** Premium: custom prompts manager (save/load prompt templates) */
