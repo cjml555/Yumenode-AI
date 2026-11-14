@@ -29,10 +29,11 @@ class ClusterRouterTest {
     }
 
     @Test
-    fun enabledRequiresFlagAndAtLeastOnePeer() {
+    fun enabledRequiresFlagPeersAndPremiumFlavor() {
         ClusterRouter.peers.add(ClusterRouter.Peer("http://a:8080"))
         ClusterRouter.enabled = true
-        assertTrue(ClusterRouter.isEnabled())
+        // free test task: gate must hold even with flag+peer; premium: all true
+        assertEquals(FeatureToggleManager.isPremium, ClusterRouter.isEnabled())
 
         ClusterRouter.enabled = false
         assertFalse(ClusterRouter.isEnabled())
@@ -43,14 +44,21 @@ class ClusterRouterTest {
     }
 
     @Test
-    fun selectHealthyPeerReturnsNullUnlessSomeoneIsHealthy() {
+    fun selectHealthyPeerRequiresPremiumAndHealthyPeer() {
         ClusterRouter.enabled = true
         ClusterRouter.peers.add(ClusterRouter.Peer("http://down:8080"))
         assertNull(ClusterRouter.selectHealthyPeer())
         assertFalse(ClusterRouter.isHealthy())
 
         ClusterRouter.peers.add(ClusterRouter.Peer("http://up:8080", healthy = true))
-        assertEquals("http://up:8080", ClusterRouter.selectHealthyPeer()?.url)
-        assertTrue(ClusterRouter.isHealthy())
+        val picked = ClusterRouter.selectHealthyPeer()
+        if (FeatureToggleManager.isPremium) {
+            assertEquals("http://up:8080", picked?.url)
+            assertTrue(ClusterRouter.isHealthy())
+        } else {
+            // free flavor: never selected, even if healthy
+            assertNull(picked)
+            assertFalse(ClusterRouter.isHealthy())
+        }
     }
 }

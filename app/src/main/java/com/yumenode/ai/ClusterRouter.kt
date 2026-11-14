@@ -54,7 +54,7 @@ object ClusterRouter {
         }
     }
 
-    fun isEnabled(): Boolean = enabled && peers.isNotEmpty()
+    fun isEnabled(): Boolean = enabled && peers.isNotEmpty() && FeatureToggleManager.isPremium
 
     fun isHealthy(): Boolean = isEnabled() && peers.any { it.healthy }
 
@@ -99,6 +99,7 @@ object ClusterRouter {
     }
 
     fun runHealthCheck(context: Context?) {
+        if (!isEnabled()) return
         peers.forEach { peer ->
             try {
                 val url = URL(peer.url + "/health")
