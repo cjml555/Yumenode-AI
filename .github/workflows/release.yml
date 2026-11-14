@@ -96,14 +96,6 @@ jobs:
           chmod 600 ponko-release.jks keystore.properties
           echo "Keystore listo ($(wc -c < ponko-release.jks) bytes)"
 
-      - name: Update version in build.gradle.kts
-        run: |
-          VERSION_NAME="${{ steps.version.outputs.version_name }}"
-          VERSION_CODE="${{ steps.version.outputs.version_code }}"
-          sed -i "s/versionCode = [0-9]*/versionCode = $VERSION_CODE/" app/build.gradle.kts
-          sed -i "s/versionName = \".*\"/versionName = \"$VERSION_NAME\"/" app/build.gradle.kts
-          echo "Updated to version $VERSION_NAME (code: $VERSION_CODE)"
-
       - name: Clean and build
         run: ./gradlew clean build
 
@@ -111,28 +103,34 @@ jobs:
         run: ./gradlew test
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew :app:assembleFreeRelease :app:assemblePremiumRelease
 
       - name: Build App Bundle
-        run: ./gradlew bundleRelease
+        run: ./gradlew :app:bundleFreeRelease :app:bundlePremiumRelease
 
       - name: Upload APK Release
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - Release APK
-          path: ${{ env.main_project_module }}/build/outputs/apk/release/*.apk
+          path: |
+            ${{ env.main_project_module }}/build/outputs/apk/free/release/*.apk
+            ${{ env.main_project_module }}/build/outputs/apk/premium/release/*.apk
 
       - name: Upload AAB
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App Bundle AAB
-          path: ${{ env.main_project_module }}/build/outputs/bundle/release/*.aab
+          path: |
+            ${{ env.main_project_module }}/build/outputs/bundle/free/release/*.aab
+            ${{ env.main_project_module }}/build/outputs/bundle/premium/release/*.aab
 
       # List build outputs
       - name: List build outputs
         run: |
-          ls -la ${{ env.main_project_module }}/build/outputs/apk/release/ 2>/dev/null || echo "No APK release files"
-          ls -la ${{ env.main_project_module }}/build/outputs/bundle/release/ 2>/dev/null || echo "No AAB files"
+          ls -la ${{ env.main_project_module }}/build/outputs/apk/free/release/ 2>/dev/null || echo "No APK release files"
+          ls -la ${{ env.main_project_module }}/build/outputs/apk/premium/release/ 2>/dev/null || echo "No APK release files"
+          ls -la ${{ env.main_project_module }}/build/outputs/bundle/free/release/ 2>/dev/null || echo "No AAB files"
+          ls -la ${{ env.main_project_module }}/build/outputs/bundle/premium/release/ 2>/dev/null || echo "No AAB files"
 
       # Commit version update if from tag
       - name: Commit version update
@@ -153,7 +151,9 @@ jobs:
           tag_name: v${{ steps.version.outputs.version_name }}
           generate_release_notes: true
           files: |
-            ${{ env.main_project_module }}/build/outputs/apk/release/*.apk
-            ${{ env.main_project_module }}/build/outputs/bundle/release/*.aab
+            ${{ env.main_project_module }}/build/outputs/apk/free/release/*.apk
+            ${{ env.main_project_module }}/build/outputs/apk/premium/release/*.apk
+            ${{ env.main_project_module }}/build/outputs/bundle/free/release/*.aab
+            ${{ env.main_project_module }}/build/outputs/bundle/premium/release/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
