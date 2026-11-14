@@ -959,6 +959,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
         appBarPlus = ui.iconButton("＋") { newSession() }
         r1.addView(appBarPlus, wrapWrap())
+        if (FeatureToggleManager.isPremium) {
+            val premiumBtn = ui.iconButton("★") { toast("Premium unlocked") }
+            r1.addView(premiumBtn, wrapWrap())
+        }
         bar.addView(r1, matchWrap())
         return bar
     }
