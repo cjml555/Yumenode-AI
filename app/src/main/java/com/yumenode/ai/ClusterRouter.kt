@@ -28,8 +28,9 @@ object ClusterRouter {
     data class Peer(val url: String, var healthy: Boolean = false, var error: String? = null)
     data class Response(val code: Int, val body: ByteArray)
 
-    private var peers: MutableList<Peer> = mutableListOf()
-    private var enabled: Boolean = false
+    // internal: unit tests set state directly (no Robolectric in project)
+    internal var peers: MutableList<Peer> = mutableListOf()
+    internal var enabled: Boolean = false
 
     fun initialize(context: Context) {
         val prefs = context.getSharedPreferences("cluster", Context.MODE_PRIVATE)
@@ -121,7 +122,7 @@ object ClusterRouter {
         prefs.edit().putString("peers", json).putBoolean("enabled", enabled).apply()
     }
 
-    private fun parsePeers(json: String): MutableList<Peer> {
+    internal fun parsePeers(json: String): MutableList<Peer> {
         return json.split("|").filter { it.isNotEmpty() }.map { Peer(it) }.toMutableList()
     }
 }
