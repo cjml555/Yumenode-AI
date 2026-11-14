@@ -54,7 +54,7 @@ object ClusterRouter {
         }
     }
 
-    fun isEnabled(): Boolean = enabled && peers.isNotEmpty() && FeatureToggleManager.isPremium
+    fun isEnabled(): Boolean = enabled && peers.isNotEmpty() && FeatureToggleManager.enableClusterRouter
 
     fun isHealthy(): Boolean = isEnabled() && peers.any { it.healthy }
 

@@ -33,7 +33,7 @@ class ClusterRouterTest {
         ClusterRouter.peers.add(ClusterRouter.Peer("http://a:8080"))
         ClusterRouter.enabled = true
         // free test task: gate must hold even with flag+peer; premium: all true
-        assertEquals(FeatureToggleManager.isPremium, ClusterRouter.isEnabled())
+        assertEquals(FeatureToggleManager.enableClusterRouter, ClusterRouter.isEnabled())
 
         ClusterRouter.enabled = false
         assertFalse(ClusterRouter.isEnabled())
@@ -52,7 +52,7 @@ class ClusterRouterTest {
 
         ClusterRouter.peers.add(ClusterRouter.Peer("http://up:8080", healthy = true))
         val picked = ClusterRouter.selectHealthyPeer()
-        if (FeatureToggleManager.isPremium) {
+        if (FeatureToggleManager.enableClusterRouter) {
             assertEquals("http://up:8080", picked?.url)
             assertTrue(ClusterRouter.isHealthy())
         } else {

@@ -484,7 +484,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         }
 
         // Premium: Cluster router — forward chat/image requests to peer devices in the LAN
-        if (FeatureToggleManager.isPremium) {
+        if (FeatureToggleManager.enableClusterRouter) {
             val clusterSwitch = SegmentedSwitch(
                 ctx,
                 arrayOf(getString(R.string.s_564), getString(R.string.s_565)),

@@ -42,6 +42,10 @@ object FeatureToggleManager {
     /** --- Priority GPU --- */
     val enablePriorityGPU: Boolean
         get() = isPremium
+
+    /** --- Cluster router --- */
+    val enableClusterRouter: Boolean
+        get() = isPremium
 }
 
 /** Enum para que el código sea auto-documentado y fácil de refactorizar. */
