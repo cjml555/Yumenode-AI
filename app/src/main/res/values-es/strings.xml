@@ -590,4 +590,8 @@
     <string name="s_565">Activado</string>
     <string name="s_566">GPU experimental desactivada tras cierre inesperado.</string>
     <string name="s_567">Exportar sesiones</string>
+    <string name="s_575">Generación por lotes</string>
+    <string name="s_576">Conteo (1–10)</string>
+    <string name="s_577">¿Cuántas imágenes generar?</string>
+    <string name="s_578">Conteo inválido, usar 1–10</string>
 </resources>

@@ -605,4 +605,8 @@
         <string name="s_572">Save</string>
         <string name="s_573">Fill in both fields</string>
         <string name="s_574">Copy</string>
+    <string name="s_575">Batch generation</string>
+    <string name="s_576">Count (1–10)</string>
+    <string name="s_577">How many images to generate?</string>
+    <string name="s_578">Invalid count, use 1–10</string>
     </resources>

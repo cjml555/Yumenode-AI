@@ -43,6 +43,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.roundToInt
 
 /** 用户主动中断生成时抛出（与真正的失败区分开）。消息不面向用户，用固定英文。 */
@@ -566,6 +567,18 @@ class DrawPage(
             setOnClickListener { if (generating) doCancel() else generateFromUi() }
         }
         t2iContent.addView(genBtn, c.matchWrap(top = 2))
+
+        // Premium: batch generation button (visible only on premium flavor)
+        if (com.yumenode.ai.FeatureToggleManager.enableBatchGeneration) {
+            batchBtn = Button(c).apply {
+                text = c.getString(R.string.s_575)
+                setBackgroundColor(Color.argb(40, 255, 215, 0))
+                setTextColor(Color.WHITE)
+                typeface = Typeface.DEFAULT_BOLD
+                setOnClickListener { generateBatch() }
+            }
+            t2iContent.addView(batchBtn, c.matchWrap(top = 2))
+        }
 
         progressText = TextView(c).apply {
             textSize = 12f
@@ -2321,8 +2334,139 @@ class DrawPage(
         }
     }
 
+    /** Premium: batch generation — prompt the user for a count, then generate N images. */
+    private fun generateBatch() {
+        val countInput = EditText(c).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = c.getString(R.string.s_576)
+            setHintTextColor(Color.argb(100, 255, 255, 255))
+            setTextColor(Color.WHITE)
+            setPadding(c.dp(12), c.dp(8), c.dp(12), c.dp(8))
+        }
+        val layout =LinearLayout(c).apply {
+            orientation =LinearLayout.VERTICAL
+            setPadding(c.dp(24), c.dp(16), c.dp(24), c.dp(8))
+        }
+        val lbl = TextView(c).apply {
+            text = c.getString(R.string.s_577)
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, c.dp(12))
+        }
+        layout.addView(lbl)
+        layout.addView(countInput)
+        android.app.AlertDialog.Builder(c)
+            .setTitle(R.string.s_575)
+            .setView(layout)
+            .setPositiveButton(R.string.s_098) { _, _ ->
+                val count = countInput.text.toString().trim().toIntOrNull()
+                if (count == null || count < 1 || count > 10) {
+                    Toast.makeText(c, c.getString(R.string.s_578), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                runBatch(count)
+            }
+            .show()
+    }
+
+    /** Premium: run N generations sequentially, saving each to filesDir/images/. */
+    private fun runBatch(count: Int) {
+        persistAll()
+        if (!isReady()) {
+            val msg = if (llmLoaded) c.getString(R.string.s_100) else c.getString(R.string.s_173)
+            Toast.makeText(c, msg, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (DrawCore.busy) {
+            Toast.makeText(c, c.getString(R.string.s_428), Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = promptEdit.text.toString().trim()
+        if (prompt.isEmpty()) {
+            Toast.makeText(c, c.getString(R.string.s_047), Toast.LENGTH_SHORT).show()
+            return
+        }
+        setGenerating(true)
+        progressText.visibility = View.VISIBLE
+        progressText.text = c.getString(R.string.v_050, "batch", "", 0)
+        curStep = 0
+        totalStep = count
+        progressBar.progress = 0
+        progressBar.visibility = View.VISIBLE
+        startPreview()
+        onStatus?.invoke(c.getString(R.string.s_165), false)
+        val startedAt = System.currentTimeMillis()
+        val ticker = scope.launch {
+            while (true) {
+                delay(1000)
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                progressText.post {
+                    val stepInfo = c.getString(R.string.v_049, (curStep), (totalStep))
+                    progressText.text = c.getString(R.string.v_050, "batch", (stepInfo), (sec))
+                    if (::procStepText.isInitialized) {
+                        procStepText.text = c.getString(R.string.v_050, "batch", (stepInfo), (sec))
+                    }
+                    if (totalStep > 0) {
+                        progressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                        if (::procProgressBar.isInitialized) {
+                            procProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                        }
+                    }
+                }
+            }
+        }
+        scope.launch {
+            try {
+                var ok = 0
+                for (i in 0 until count) {
+                    if (cancelRequested) break
+                    curStep = i
+                    val img = generateImage(
+                        prompt,
+                        onProgress = { cur, total -> },
+                        onPreview = { st, w, h, rgb -> onPreviewFrame(st, w, h, rgb) },
+                    )
+                    val bmp = toBitmap(img)
+                    resultImg.post {
+                        DrawHistory.add(img)
+                        lastImage = bmp
+                        resultImg.setImageBitmap(bmp)
+                        resultInfo.text = c.getString(R.string.v_051, (img.width), (img.height), (img.seed), (System.currentTimeMillis() - startedAt) / 1000)
+                    }
+                    val out = File(c.filesDir, "images/batch_${System.currentTimeMillis()}_${i}.jpg")
+                    out.parentFile?.mkdirs()
+                    FileOutputStream(out).use { fos ->
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+                    }
+                    ok++
+                }
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                val doneTxt = c.getString(R.string.v_052, (ok), (count), (sec))
+                progressText.post { progressText.text = doneTxt }
+                if (::procStepText.isInitialized) procStepText.post { procStepText.text = doneTxt }
+                onStatus?.invoke(c.getString(R.string.v_053, (sec)), false)
+                Toast.makeText(c, "Batch done: $ok/$count saved", Toast.LENGTH_LONG).show()
+            } catch (e: Throwable) {
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                val errTxt = c.getString(R.string.v_059, (sec), (e.message ?: e.javaClass.simpleName)) + "\n" + c.getString(R.string.v_060)
+                progressText.post { progressText.text = errTxt }
+                if (::procStepText.isInitialized) procStepText.post { procStepText.text = errTxt }
+                onStatus?.invoke(c.getString(R.string.v_055, (e.message ?: e.javaClass.simpleName)), true)
+            } finally {
+                setGenerating(false)
+                progressBar.post { progressBar.visibility = View.GONE }
+                switchResultPage(0)
+            }
+        }
+    }
+
     private var curStep = 0
     private var totalStep = 0
+
+    /** Premium: batch generation button (null in free flavor). */
+    private var batchBtn: Button? = null
 
     /** 用户是否已请求中断当前生成（用于把“取消”与“真失败”区分开）。 */
     @Volatile private var cancelRequested = false
