@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-13
+
+### Added
+- **Premium: Priority GPU thread boost** (`ChatCore` + `SettingsPage`): toggle en Ajustes > Prioridad GPU, sube la prioridad del hilo de inferencia a `THREAD_PRIORITY_URGENT_DISPLAY` cuando está activado (solo flavor premium, lectura en `ModelLoadController` al cargar modelo).
+- **Premium: Multi-device API (LAN URL share)** — botón en Ajustes que muestra la URL del chat API en la red local, estado (running/enabled/disabled), token, con opciones Copiar/Compartir.
+- **Premium: Usage analytics (CSV export)** — resumen local de sesiones/turnos/imágenes exportado a `analytics_<ts>.csv` en `filesDir`.
+- **Premium: Cloud sync (upload sessions)** — POST `sessions.json` a URL de servidor definida por el usuario con token opcional (Bearer), usando `HttpURLConnection` (sin nuevas dependencias).
+- **Premium: Advanced benchmark (CSV export)** — métricas detalladas (tps_avg/min/max, latencias, tokens) exportadas a `benchmark_<ts>.csv`.
+- **Premium: Batch generation** — generación de 1-10 imágenes en cola desde DrawPage, guardadas en `filesDir/images/`.
+- **Premium: Custom prompts manager** — guardar/cargar/borrar/copiar plantillas de prompt en SharedPreferences `custom_prompts`.
+- **Premium: Session export** — exportar `sessions.json` a fichero en `filesDir` para backup/transferencia.
+- **Premium: Badge + star button en app bar** — indicador visual de flavor premium en `MainActivity`.
+- **Free/premium flavors (tier dimension)** — `applicationId` separados (`com.yumenode.ai` / `com.yumenode.ai.premium`), `versionCode` desplazados (`10xxx` / `20xxx`), R8 full mode + ProGuard reglas.
+- **Security hardening** — `allowBackup="false"`, `exported="false"` en receptor API, ProGuard rules para librerías nativas y reflexión.
+
 ### Refactor — lógica de idioma y tema a LocaleController
 
 - **`LocaleController` + `LocaleHost`** (`LocaleController.kt`, `LocaleHost.kt`)
