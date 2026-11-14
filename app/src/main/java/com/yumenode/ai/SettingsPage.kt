@@ -483,6 +483,27 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(gpuSwitch, matchWrap().apply { topMargin = dp(4) })
         }
 
+        // Premium: Cluster router — forward chat/image requests to peer devices in the LAN
+        if (FeatureToggleManager.isPremium) {
+            val clusterSwitch = SegmentedSwitch(
+                ctx,
+                arrayOf(getString(R.string.s_564), getString(R.string.s_565)),
+                host.palette,
+                if (host.prefBool("cluster_enabled", false)) 1 else 0,
+            )
+            clusterSwitch.onChanged = { i ->
+                host.prefPutBool("cluster_enabled", i == 1)
+                ClusterRouter.setEnabled(i == 1, host.activity)
+            }
+            val clusterTitle = host.ui.pageTitle(getString(R.string.s_585))
+            val clusterHint = host.ui.hintText(getString(R.string.s_586))
+            val clusterBtn = host.ui.actionButton(getString(R.string.s_587)) { openClusterPeers() }
+            aboutBody.addView(clusterTitle, matchWrap().apply { topMargin = dp(8) })
+            aboutBody.addView(clusterHint)
+            aboutBody.addView(clusterSwitch, matchWrap().apply { topMargin = dp(4) })
+            aboutBody.addView(clusterBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -656,6 +677,35 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                     putExtra(android.content.Intent.EXTRA_TEXT, body)
                 }
                 host.activity.startActivity(android.content.Intent.createChooser(send, host.activity.getString(R.string.s_582)))
+            }
+            .setNegativeButton(R.string.s_066, null)
+            .show()
+    }
+
+    /** Premium: edit cluster peer URLs (newline-separated http://IP:port) */
+    private fun openClusterPeers() {
+        val prefs = host.activity.getSharedPreferences("cluster", Context.MODE_PRIVATE)
+        val current = prefs.getString("peers", "") ?: ""
+        val input = android.widget.EditText(host.activity).apply {
+            setText(current)
+            hint = "http://192.168.1.10:8080"
+            setPadding(host.activity.dp(12), host.activity.dp(8), host.activity.dp(12), host.activity.dp(8))
+            minLines = 3
+        }
+        val layout = LinearLayout(host.activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(host.activity.dp(16), host.activity.dp(8), host.activity.dp(16), host.activity.dp(8))
+        }
+        layout.addView(host.ui.hintText(host.activity.getString(R.string.s_588)))
+        layout.addView(input)
+        android.app.AlertDialog.Builder(host.activity)
+            .setTitle(R.string.s_587)
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                val urls = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+                prefs.edit().putString("peers", urls.joinToString("\n")).apply()
+                ClusterRouter.reload(host.activity)
+                host.toast("Saved ${urls.size} peer(s)")
             }
             .setNegativeButton(R.string.s_066, null)
             .show()

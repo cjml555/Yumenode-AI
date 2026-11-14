@@ -130,6 +130,13 @@ class ApiServer(
                 return
             }
         }
+
+        // Cluster forward for non-streaming chat completions and image generations
+        if (method == "POST" && (path == "/v1/chat/completions" || path == "/v1/images/generations")) {
+            val stream = path == "/v1/chat/completions" && isStreamingRequest(body)
+            if (!stream && tryClusterForward(s, method, path, headers, body)) return
+        }
+
         when {
             method == "GET" && (path == "/health" || path == "/") -> respondJson(s, 200, healthJson())
 
@@ -143,6 +150,23 @@ class ApiServer(
 
             else -> respondJson(s, 404, OpenAiApi.error("Not found: $method $path", OpenAiApi.ErrorType.INVALID_REQUEST))
         }
+    }
+
+    /** Check if the chat completions request asks for streaming (SSE). */
+    private fun isStreamingRequest(body: ByteArray): Boolean {
+        return try {
+            val json = org.json.JSONObject(String(body, java.nio.charset.StandardCharsets.UTF_8))
+            json.optBoolean("stream", false)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Try forwarding to a healthy cluster peer. Returns true if forwarded successfully. */
+    private fun tryClusterForward(s: Socket, method: String, path: String, headers: Map<String, String>, body: ByteArray): Boolean {
+        val response = ClusterRouter.forward(method, path, headers, body) ?: return false
+        respond(s, response.code, "application/json; charset=utf-8", response.body)
+        return true
     }
 
     /** Request hit the "other interface type's" port — clearly tell the client where to go, don't make it guess */

@@ -615,4 +615,8 @@
     <string name="s_582">Multi-device API</string>
     <string name="s_583">Priority GPU</string>
     <string name="s_584">Boost inference thread priority for faster GPU access</string>
+    <string name="s_585">Cluster router</string>
+    <string name="s_586">Forward requests to peer devices in your LAN to share the model across phones</string>
+    <string name="s_587">Edit cluster peers</string>
+    <string name="s_588">Peer URLs (one per line, http://IP:port)</string>
     </resources>

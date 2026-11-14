@@ -600,4 +600,8 @@
     <string name="s_582">API multidispositivo</string>
     <string name="s_583">Prioridad GPU</string>
     <string name="s_584">Incrementa la prioridad del hilo de inferencia para un acceso más rápido a la GPU</string>
+    <string name="s_585">Router de clúster</string>
+    <string name="s_586">Reenvía las peticiones a dispositivos de tu red local para compartir el modelo entre teléfonos</string>
+    <string name="s_587">Editar pares del clúster</string>
+    <string name="s_588">URLs de pares (una por línea, http://IP:puerto)</string>
 </resources>

@@ -11,7 +11,9 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -181,11 +183,22 @@ class ApiService : Service() {
 
     private var wifiLock: WifiManager.WifiLock? = null
 
+    // --- Background health checks for cluster peers ---
+    private val healthCheckHandler = Handler(Looper.getMainLooper())
+    private val healthCheckRunnable = object : Runnable {
+        override fun run() {
+            ClusterRouter.runHealthCheck(this@ApiService)
+            healthCheckHandler.postDelayed(this, 30000)
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground service must call startForeground ASAP (may have been started via startForegroundService),
         // so go foreground first, then align servers
         ensureChannel()
         goForeground()
+        // Start periodic cluster health checks (no-op if cluster disabled)
+        healthCheckHandler.postDelayed(healthCheckRunnable, 5000)
         when (intent?.action) {
             ACTION_STOP -> {
                 shutdownAll()
@@ -211,6 +224,7 @@ class ApiService : Service() {
 
     override fun onDestroy() {
         shutdownAll()
+        healthCheckHandler.removeCallbacks(healthCheckRunnable)
         super.onDestroy()
     }
 
@@ -234,6 +248,7 @@ class ApiService : Service() {
     // ==================== Start/stop alignment ====================
 
     private fun reconcile() {
+        ClusterRouter.initialize(this)
         reconcileOne(ApiServer.Role.CHAT)
         reconcileOne(ApiServer.Role.DRAW)
     }
