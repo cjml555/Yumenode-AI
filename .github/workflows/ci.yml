@@ -39,13 +39,15 @@ jobs:
           link-to-sdk: true
 
       - name: Run tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew :app:testFreeDebugUnitTest :app:testPremiumDebugUnitTest
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew :app:assembleFreeDebug :app:assemblePremiumDebug
 
       - name: Upload APK Debug
         uses: actions/upload-artifact@v7.0.2
         with:
           name: Debug APK - ${{ github.sha }}
-          path: ${{ env.main_project_module }}/build/outputs/apk/debug/*.apk
+          path: |
+            ${{ env.main_project_module }}/build/outputs/apk/free/debug/*.apk
+            ${{ env.main_project_module }}/build/outputs/apk/premium/debug/*.apk
