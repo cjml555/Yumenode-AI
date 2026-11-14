@@ -597,4 +597,5 @@
     <string name="s_564">Off</string>
     <string name="s_565">On</string>
     <string name="s_566">Experimental GPU was turned off after an unexpected close.</string>
+<string name="s_567">Export sessions</string>
 </resources>

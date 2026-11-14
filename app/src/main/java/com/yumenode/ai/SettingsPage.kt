@@ -17,6 +17,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.view.animation.DecelerateInterpolator
+import java.io.File
 
 /**
  * Pestaña «Acerca de / Ajustes»: tema, hilos de inferencia y créditos.
@@ -424,10 +425,29 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(host.ui.hintText("Premium features: $enabled"), matchWrap())
         }
 
+        // Premium: Export sessions
+        if (FeatureToggleManager.isPremium) {
+            val exportBtn = host.ui.actionButton(getString(R.string.s_567)) { exportSessions() }
+            aboutBody.addView(exportBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
+    }
+
+    /** Premium: export sessions to a file */
+    private fun exportSessions() {
+        val sessions = host.activity.filesDir.listFiles { _, name -> name == "sessions.json" }?.firstOrNull()
+        if (sessions == null) {
+            host.toast("No sessions file found")
+            return
         }
+        val data = sessions.readText()
+        val file = File(host.activity.getExternalFilesDir(null), "sessions_export_${System.currentTimeMillis()}.json")
+        file.writeText(data)
+        host.toast("Sessions exported to ${file.absolutePath}")
+    }
 
     /** Sección plegable con estado persistido (clave de preferencias). */
     private fun collapsibleSection(

@@ -588,5 +588,6 @@
     <string name="s_563">Sin Vulkan en este dispositivo</string>
     <string name="s_564">Apagado</string>
     <string name="s_565">Activado</string>
-    <string name="s_566">GPU experimental desactivada tras un cierre inesperado.</string>
+    <string name="s_566">GPU experimental desactivada tras cierre inesperado.</string>
+    <string name="s_567">Exportar sesiones</string>
 </resources>
