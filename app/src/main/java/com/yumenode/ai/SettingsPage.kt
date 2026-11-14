@@ -447,6 +447,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(benchBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Cloud sync (upload sessions to a server URL)
+        if (FeatureToggleManager.isPremium) {
+            val syncBtn = host.ui.actionButton(getString(R.string.s_580)) { openCloudSync() }
+            aboutBody.addView(syncBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -478,6 +484,68 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         val file = File(host.activity.getExternalFilesDir(null), "benchmark_${System.currentTimeMillis()}.csv")
         file.writeText(csv.toString())
         host.toast("Benchmark CSV exported to ${file.absolutePath}")
+    }
+
+    /** Premium: cloud sync — upload sessions.json to a user-provided server URL. */
+    private fun openCloudSync() {
+        val prefs = host.activity.getSharedPreferences("cloud_sync", Context.MODE_PRIVATE)
+        val urlInput = EditText(host.activity).apply {
+            hint = "Server URL"
+            setText(prefs.getString("url", ""))
+        }
+        val tokenInput = EditText(host.activity).apply {
+            hint = "Token (optional)"
+            setText(prefs.getString("token", ""))
+        }
+        val layout = LinearLayout(host.activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(host.activity.dp(16), host.activity.dp(8), host.activity.dp(16), host.activity.dp(8))
+        }
+        layout.addView(urlInput)
+        layout.addView(tokenInput)
+        android.app.AlertDialog.Builder(host.activity)
+            .setTitle(R.string.s_580)
+            .setView(layout)
+            .setPositiveButton(R.string.s_580) { _, _ ->
+                val url = urlInput.text.toString().trim()
+                if (url.isBlank()) {
+                    host.toast("Enter a server URL")
+                    return@setPositiveButton
+                }
+                val token = tokenInput.text.toString().trim()
+                prefs.edit().putString("url", url).putString("token", token).apply()
+                uploadSessions(url, token)
+            }
+            .setNegativeButton(R.string.s_066, null)
+            .show()
+    }
+
+    private fun uploadSessions(url: String, token: String) {
+        val sessions = host.activity.filesDir.listFiles { _, name -> name == "sessions.json" }?.firstOrNull()
+        if (sessions == null) {
+            host.toast("No sessions file found")
+            return
+        }
+        val data = sessions.readText()
+        Thread {
+            try {
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.outputStream.use { it.write(data.toByteArray()) }
+                val code = conn.responseCode
+                conn.disconnect()
+                host.activity.runOnUiThread {
+                    host.toast(if (code in 200..299) "Cloud sync OK (HTTP $code)" else "Cloud sync failed (HTTP $code)")
+                }
+            } catch (e: Throwable) {
+                host.activity.runOnUiThread { host.toast("Cloud sync failed: ${e.message ?: e.javaClass.simpleName}") }
+            }
+        }.start()
     }
 
     /** Premium: custom prompts manager (save/load prompt templates) */
