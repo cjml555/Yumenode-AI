@@ -120,9 +120,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App Bundle AAB
-          path: |
-            ${{ env.main_project_module }}/build/outputs/bundle/free/release/*.aab
-            ${{ env.main_project_module }}/build/outputs/bundle/premium/release/*.aab
+          path: ${{ env.main_project_module }}/build/outputs/bundle/**/*.aab
 
       # List build outputs
       - name: List build outputs
@@ -153,7 +151,6 @@ jobs:
           files: |
             ${{ env.main_project_module }}/build/outputs/apk/free/release/*.apk
             ${{ env.main_project_module }}/build/outputs/apk/premium/release/*.apk
-            ${{ env.main_project_module }}/build/outputs/bundle/free/release/*.aab
-            ${{ env.main_project_module }}/build/outputs/bundle/premium/release/*.aab
+            ${{ env.main_project_module }}/build/outputs/bundle/**/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
