@@ -597,5 +597,12 @@
     <string name="s_564">Off</string>
     <string name="s_565">On</string>
     <string name="s_566">Experimental GPU was turned off after an unexpected close.</string>
-<string name="s_567">Export sessions</string>
-</resources>
+        <string name="s_567">Export sessions</string>
+        <string name="s_568">Custom prompts</string>
+        <string name="s_569">Custom prompts</string>
+        <string name="s_570">Name</string>
+        <string name="s_571">Prompt</string>
+        <string name="s_572">Save</string>
+        <string name="s_573">Fill in both fields</string>
+        <string name="s_574">Copy</string>
+    </resources>

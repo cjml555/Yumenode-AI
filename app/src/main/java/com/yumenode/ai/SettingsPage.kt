@@ -2,9 +2,13 @@
 package com.yumenode.ai
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -431,6 +435,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             aboutBody.addView(exportBtn, matchWrap().apply { topMargin = dp(8) })
         }
 
+        // Premium: Custom prompts manager
+        if (FeatureToggleManager.isPremium) {
+            val customBtn = host.ui.actionButton(getString(R.string.s_568)) { openCustomPrompts() }
+            aboutBody.addView(customBtn, matchWrap().apply { topMargin = dp(8) })
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv
@@ -447,6 +457,98 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         val file = File(host.activity.getExternalFilesDir(null), "sessions_export_${System.currentTimeMillis()}.json")
         file.writeText(data)
         host.toast("Sessions exported to ${file.absolutePath}")
+    }
+
+    /** Premium: custom prompts manager (save/load prompt templates) */
+    private fun openCustomPrompts() {
+        val prefs = host.activity.getSharedPreferences("custom_prompts", Context.MODE_PRIVATE)
+
+        val layout = LinearLayout(host.activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(host.activity.dp(16), host.activity.dp(8), host.activity.dp(16), host.activity.dp(8))
+        }
+
+        val listLayout = LinearLayout(host.activity).apply { orientation = LinearLayout.VERTICAL }
+
+        // Declared as a var so the delete handler can re-invoke it (recursive refresh).
+        var refreshList: () -> Unit = {}
+        refreshList = {
+            listLayout.removeAllViews()
+            val prompts = prefs.all.filterValues { it is String }.toSortedMap()
+            for ((name, value) in prompts) {
+                val t = value as String
+                val row = LinearLayout(host.activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(host.activity.dp(4), host.activity.dp(4), host.activity.dp(4), host.activity.dp(4))
+                }
+                val lbl = TextView(host.activity).apply {
+                    text = "$name: ${t.take(40)}${if (t.length > 40) "…" else ""}"
+                    textSize = 13f
+                    setTextColor(C_TEXT)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                val copyBtn = Button(host.activity).apply {
+                    text = host.activity.getString(R.string.s_574)
+                    setOnClickListener {
+                        val cm = host.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("prompt", t))
+                        host.toast("Copied: $name")
+                    }
+                }
+                val delBtn = Button(host.activity).apply {
+                    text = host.activity.getString(R.string.s_005)
+                    setOnClickListener {
+                        prefs.edit().remove(name).apply()
+                        refreshList()
+                        host.toast("Deleted: $name")
+                    }
+                }
+                row.addView(lbl)
+                row.addView(copyBtn)
+                row.addView(delBtn)
+                listLayout.addView(row)
+            }
+        }
+
+        // Add new prompt row
+        val addRow = LinearLayout(host.activity).apply { orientation = LinearLayout.HORIZONTAL }
+        val nameInput = EditText(host.activity).apply {
+            hint = host.activity.getString(R.string.s_570)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val textInput = EditText(host.activity).apply {
+            hint = host.activity.getString(R.string.s_571)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f)
+        }
+        val saveBtn = Button(host.activity).apply {
+            text = host.activity.getString(R.string.s_572)
+            setOnClickListener {
+                val n = nameInput.text.toString().trim()
+                val txt = textInput.text.toString().trim()
+                if (n.isBlank() || txt.isBlank()) {
+                    host.toast(host.activity.getString(R.string.s_573))
+                    return@setOnClickListener
+                }
+                prefs.edit().putString(n, txt).apply()
+                nameInput.setText("")
+                textInput.setText("")
+                refreshList()
+                host.toast("Saved: $n")
+            }
+        }
+        addRow.addView(nameInput)
+        addRow.addView(textInput)
+        addRow.addView(saveBtn)
+        layout.addView(addRow)
+        layout.addView(listLayout)
+
+        refreshList()
+        android.app.AlertDialog.Builder(host.activity)
+            .setTitle(R.string.s_569)
+            .setView(layout)
+            .setNegativeButton(R.string.s_066, null)
+            .show()
     }
 
     /** Sección plegable con estado persistido (clave de preferencias). */
