@@ -24,6 +24,9 @@
 -keep class io.noties.markwon.** { *; }
 -dontwarn io.noties.markwon.**
 
+# PdfBox JPX / JP2 decoder (auto-generated missing class)
+-dontwarn com.gemalto.jp2.JP2Decoder
+
 # Establecer recursos (no eliminar strings / layouts / drawables)
 -keepclassmembers class **.R$* {
     public static <fields>;

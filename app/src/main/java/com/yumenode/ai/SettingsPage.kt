@@ -409,6 +409,21 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             linkText(getString(R.string.s_453), "https://github.com/cjml555/Yumenode-AI/blob/main/NOTICE")
         )
 
+                // Premium status row (visible only on premium flavor)
+        if (FeatureToggleManager.isPremium) {
+            val enabled = listOf(
+                "cloud sync" to FeatureToggleManager.enableCloudSync,
+                "batch generation" to FeatureToggleManager.enableBatchGeneration,
+                "advanced benchmark" to FeatureToggleManager.enableAdvancedBenchmark,
+                "session export" to FeatureToggleManager.enableSessionExport,
+                "usage analytics" to FeatureToggleManager.enableUsageAnalytics,
+                "custom prompts" to FeatureToggleManager.enableCustomPrompts,
+                "multi-device API" to FeatureToggleManager.enableMultiDeviceAPI,
+                "priority GPU" to FeatureToggleManager.enablePriorityGPU
+            ).filter { it.second }.joinToString { it.first }
+            aboutBody.addView(host.ui.hintText("Premium features: $enabled"), matchWrap())
+        }
+
         sv.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         return sv

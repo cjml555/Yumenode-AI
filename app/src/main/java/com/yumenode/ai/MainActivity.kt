@@ -98,6 +98,7 @@ import com.yumenode.ai.AttachmentHandler
 import com.yumenode.ai.RoundOut
 import com.yumenode.ai.ToolReturn
 import com.yumenode.ai.tagRolesGguf
+import com.yumenode.ai.FeatureToggleManager
 
 /**
  * On-device chat app that loads a Google LiteRT-LM (.litertlm) model from local
@@ -945,6 +946,17 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         titleBox.addView(statusRow, matchWrap())
 
         r1.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        // Premium badge: visible only on premium flavor
+        if (FeatureToggleManager.isPremium) {
+            val badge = TextView(this).apply {
+                text = "Premium"
+                textSize = 9.5f
+                setTextColor(C_PRIMARY)
+                background = rounded(C_PRIMARY_SOFT, 8)
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+            }
+            r1.addView(badge, wrapWrap().apply { leftMargin = dp(6) })
+        }
         appBarPlus = ui.iconButton("＋") { newSession() }
         r1.addView(appBarPlus, wrapWrap())
         bar.addView(r1, matchWrap())

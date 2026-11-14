@@ -49,6 +49,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     // 签名：优先 keystore.properties（本地，gitignored），其次环境变量
     val keystoreProps = Properties()
     val keystorePropsFile = rootProject.file("keystore.properties")
