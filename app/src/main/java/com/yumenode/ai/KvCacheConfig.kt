@@ -1,6 +1,7 @@
 // Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 package com.yumenode.ai
 
+import android.app.ActivityManager
 import android.content.Context
 import net.ladenthin.llama.args.CacheType
 
@@ -22,6 +23,13 @@ internal object KvCacheConfig {
 
     private const val PREFS = "ponko"
     private const val KEY_CACHE_TYPE = "kvCacheType"
+
+    /** Por debajo de esta RAM total, el cache KV default a Q4_0 para salvar VRAM. */
+    private const val LOW_RAM_BYTES = 6L * 1024 * 1024 * 1024
+
+    /** Default por RAM total del dispositivo (sin override del usuario). */
+    internal fun defaultFor(totalMemBytes: Long): CacheType =
+        if (totalMemBytes in 1 until LOW_RAM_BYTES) CacheType.Q4_0 else CacheType.Q8_0
 
     /** Opciones ofrecidas, de mas a menos calidad (y de menos a mas RAM). */
     val OPTIONS: List<CacheType> = listOf(
@@ -46,10 +54,12 @@ internal object KvCacheConfig {
         else -> ""
     }
 
-    /** Tipo configurado (por defecto Q8_0). */
+    /** Tipo configurado (por defecto según RAM del dispositivo). */
     fun type(context: Context): CacheType {
-        val name = prefs(context).getString(KEY_CACHE_TYPE, null) ?: return CacheType.Q8_0
-        return OPTIONS.firstOrNull { it.name == name } ?: CacheType.Q8_0
+        prefs(context).getString(KEY_CACHE_TYPE, null)?.let { name ->
+            return OPTIONS.firstOrNull { it.name == name } ?: CacheType.Q8_0
+        }
+        return defaultFor(totalRam(context))
     }
 
     /** Guarda el tipo elegido. */
@@ -59,4 +69,11 @@ internal object KvCacheConfig {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun totalRam(context: Context): Long {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return 0L
+        val mi = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        return mi.totalMem
+    }
 }

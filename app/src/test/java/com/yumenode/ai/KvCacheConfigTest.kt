@@ -84,4 +84,22 @@ class KvCacheConfigTest {
         val label = KvCacheConfig.label(CacheType.Q5_1)
         assertEquals("Q5_1", label)
     }
+
+    // ---- Auto-seleccion por RAM ----
+
+    @Test
+    fun lowRamDefaultsToQ4_0() {
+        assertEquals(CacheType.Q4_0, KvCacheConfig.defaultFor(5L * 1024 * 1024 * 1024))
+    }
+
+    @Test
+    fun sixGigabytesOrMoreDefaultsToQ8_0() {
+        assertEquals(CacheType.Q8_0, KvCacheConfig.defaultFor(6L * 1024 * 1024 * 1024))
+        assertEquals(CacheType.Q8_0, KvCacheConfig.defaultFor(8L * 1024 * 1024 * 1024))
+    }
+
+    @Test
+    fun unknownRamDefaultsToQ8_0() {
+        assertEquals(CacheType.Q8_0, KvCacheConfig.defaultFor(0))
+    }
 }
