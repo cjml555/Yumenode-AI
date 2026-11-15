@@ -87,7 +87,10 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          echo "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > ponko-release.jks || { echo "::error::KEYSTORE_BASE64 no decodifica — debe ser la salida de 'base64 -w0 fichero.jks', 1 sola línea, sin comillas"; exit 1; }
+          STRIPPED="$(printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]')"
+          echo "longitud sin espacios: ${#STRIPPED}"
+          echo "caracteres invalidos (hasta 40): $(printf '%s' "$STRIPPED" | tr -d 'A-Za-z0-9+/=' | head -c 40)"
+          echo "$STRIPPED" | tr -d '[:space:]' | base64 -d > ponko-release.jks || { echo "::error::KEYSTORE_BASE64 no decodifica"; exit 1; }
           {
             echo "storeFile=ponko-release.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
