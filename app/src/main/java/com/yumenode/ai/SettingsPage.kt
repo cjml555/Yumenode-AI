@@ -268,13 +268,13 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             matchWrap().apply { topMargin = dp(6) }
         )
 
-        // ---- GPU experimental (Vulkan): opt-in, default OFF ----
+        // ---- GPU experimental (Vulkan): on by default, apagable ----
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_561)), matchWrap().apply { topMargin = dp(14) })
         val gpuSwitch = SegmentedSwitch(
             ctx,
             arrayOf(getString(R.string.s_564), getString(R.string.s_565)),
             host.palette,
-            if (host.prefBool(KEY_GPU_EXPERIMENTAL, false)) 1 else 0,
+            if (host.prefBool(KEY_GPU_EXPERIMENTAL, true)) 1 else 0,
         )
         // Sin driver Vulkan el toggle no se puede activar (sin bloqueo por SoC).
         val hasVulkan = caps.hasVulkan
@@ -284,7 +284,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         }
         gpuSwitch.onChanged = { i ->
             if (!hasVulkan) {
-                gpuSwitch.setIndexSilently(if (host.prefBool(KEY_GPU_EXPERIMENTAL, false)) 1 else 0)
+                gpuSwitch.setIndexSilently(if (host.prefBool(KEY_GPU_EXPERIMENTAL, true)) 1 else 0)
             } else {
                 host.prefPutBool(KEY_GPU_EXPERIMENTAL, i == 1)
             }

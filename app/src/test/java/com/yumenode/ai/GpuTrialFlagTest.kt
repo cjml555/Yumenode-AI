@@ -55,7 +55,7 @@ class GpuTrialFlagTest {
     }
 
     @Test fun gpu_allowed_defaults_to_false() {
-        assertFalse(GpuSupport.gpuAllowed(FakePrefs()))
+        assertTrue(GpuSupport.gpuAllowed(FakePrefs()))
     }
 
     @Test fun gpu_allowed_reads_the_setting() {

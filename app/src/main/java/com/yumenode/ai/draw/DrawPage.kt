@@ -269,7 +269,7 @@ class DrawPage(
     var onStatus: ((String, Boolean) -> Unit)? = null
 
     /** Run mode: true = try GPU (Vulkan), false = CPU only. Set by the "run mode" on the model page. */
-    var useGpu: Boolean = false
+    var useGpu: Boolean = true
 
     /** Backend actually used for drawing ("CPU" / "Vulkan0"), shown in the status line */
     private var activeBackend: String = "CPU"

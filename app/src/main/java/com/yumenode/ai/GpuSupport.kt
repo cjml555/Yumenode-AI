@@ -27,12 +27,12 @@ internal object GpuSupport {
     /**
      * ¿Se permite pedirle a llama.cpp que meta capas en la GPU?
      * Lee el opt-in del usuario (KEY_GPU_EXPERIMENTAL, default OFF).
-     * Un SIGSEGV del driver no se puede catchar: por eso solo se activa
-     * cuando el usuario lo enciende, y el auto-apagado tras crash
+     * Un SIGSEGV del driver no se puede catchar: por eso viene encendido por
+     * defecto pero es apagable, y el auto-apagado tras crash
      * (GpuTrial) lo devuelve a CPU en el siguiente arranque.
      */
     fun gpuAllowed(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_GPU_EXPERIMENTAL, false)
+        prefs.getBoolean(KEY_GPU_EXPERIMENTAL, true)
 
     /** Cacheado: la cadena de build no cambia durante la vida del proceso. */
     @Volatile
