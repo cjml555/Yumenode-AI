@@ -31,8 +31,11 @@ object ClusterRouter {
     // internal: unit tests set state directly (no Robolectric in project)
     internal var peers: MutableList<Peer> = mutableListOf()
     internal var enabled: Boolean = false
+    // store context for signature verification
+    private var _context: Context? = null
 
     fun initialize(context: Context) {
+        _context = context
         val prefs = context.getSharedPreferences("cluster", Context.MODE_PRIVATE)
         enabled = prefs.getBoolean("enabled", false)
         val json = prefs.getString("peers", "")
@@ -54,7 +57,8 @@ object ClusterRouter {
         }
     }
 
-    fun isEnabled(): Boolean = enabled && peers.isNotEmpty() && FeatureToggleManager.enableClusterRouter
+    fun isEnabled(): Boolean = enabled && peers.isNotEmpty() && FeatureToggleManager.enableClusterRouter &&
+        (_context == null || FeatureToggleManager.signatureMatchesPin(_context!!))
 
     fun isHealthy(): Boolean = isEnabled() && peers.any { it.healthy }
 
