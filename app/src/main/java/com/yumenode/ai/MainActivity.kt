@@ -1230,6 +1230,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     override fun switchTab(index: Int) {
+        currentTab = index
         tabChat.visibility = if (index == 0) View.VISIBLE else View.GONE
         tabModels.visibility = if (index == 1) View.VISIBLE else View.GONE
         tabDraw.visibility = if (index == 2) View.VISIBLE else View.GONE
