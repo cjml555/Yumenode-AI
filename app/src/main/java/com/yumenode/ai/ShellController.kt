@@ -18,13 +18,16 @@ class ShellController(private val host: ShellHost) : ShellHost {
 
     override fun buildAppBar(): View = host.buildAppBar()
 
-    override fun buildBottomNav(): View = host.buildBottomNav()
+    override fun buildBottomNav(): View {
+        // MainActivity.buildBottomNav() is implemented directly, so this call won't recurse
+        return host.buildBottomNav()
+    }
 
     override fun switchTab(index: Int) {
         host.switchTab(index)
     }
 
-    override fun buildDrawer(rootFrame: android.widget.FrameLayout) {
+    override fun buildDrawer(rootFrame: FrameLayout) {
         host.buildDrawer(rootFrame)
     }
 

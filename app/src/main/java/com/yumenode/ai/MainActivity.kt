@@ -1190,10 +1190,46 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ---- Bottom navigation ----
 
-    override fun buildBottomNav(): View = shellController.buildBottomNav()
+    override fun buildBottomNav(): View {
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(C_CARD)
+            elevation = dp(6).toFloat()
+        }
+        val items = listOf(
+            Triple("💬", getString(R.string.s_074), 0),
+            Triple("🧠", getString(R.string.s_124), 1),
+            Triple("🎨", getString(R.string.s_150), 2),
+            Triple("⬇️", getString(R.string.s_454), 3),
+            Triple("🖼️", getString(R.string.s_499), 4),
+            Triple("⚙️", getString(R.string.s_381), 5),
+        )
+        for ((icon, label, idx) in items) {
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                setPadding(0, dp(7), 0, dp(7))
+                setOnClickListener { switchTab(idx) }
+            }
+            val iconTv = TextView(this).apply { text = icon; textSize = 17f; gravity = Gravity.CENTER }
+            val labelTv = TextView(this).apply {
+                text = label
+                textSize = 10f
+                maxLines = 2
+                gravity = Gravity.CENTER
+                setPadding(0, dp(1), 0, 0)
+            }
+            item.addView(iconTv, matchWrap())
+            item.addView(labelTv, matchWrap())
+            navIcons += iconTv
+            navLabels += labelTv
+            nav.addView(item, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        return nav
+    }
 
     override fun switchTab(index: Int) {
-        currentTab = index
         tabChat.visibility = if (index == 0) View.VISIBLE else View.GONE
         tabModels.visibility = if (index == 1) View.VISIBLE else View.GONE
         tabDraw.visibility = if (index == 2) View.VISIBLE else View.GONE
