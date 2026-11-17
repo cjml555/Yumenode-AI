@@ -1,0 +1,20 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index 33936acae..0aac72018 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -4527,6 +4527,17 @@ vk_device ggml_vk_get_device(size_t idx) {
+         device->buffer_device_address = vk12_features.bufferDeviceAddress;
+         device->vulkan_memory_model = vk12_features.vulkanMemoryModel;
+ 
++        // Probe BDA function pointers (core + EXT) for Android Adreno compatibility
++        if (device->buffer_device_address) {
++            device->pfn_vkGetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)
++                vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddress");
++            if (!device->pfn_vkGetBufferDeviceAddress) {
++                device->pfn_vkGetBufferDeviceAddressEXT = (PFN_vkGetBufferDeviceAddressEXT)
++                    vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddressEXT");
++            }
++        }
++
+         if (device->subgroup_size_control) {
+             device->subgroup_min_size = subgroup_size_control_props.minSubgroupSize;

@@ -864,6 +864,8 @@ struct vk_device_struct {
 
     bool device_fault {};
     PFN_vkGetDeviceFaultInfoEXT pfn_vkGetDeviceFaultInfoEXT {};
+    PFN_vkGetBufferDeviceAddress pfn_vkGetBufferDeviceAddress {};
+    PFN_vkGetBufferDeviceAddressEXT pfn_vkGetBufferDeviceAddressEXT {};
 
     bool serialize_submissions {};
 
@@ -3567,23 +3569,14 @@ static vk_buffer ggml_vk_create_buffer(vk_device& device, size_t size, const std
     buf->size = size;
 
     if (device->buffer_device_address) {
-        // Algunos drivers (Adreno en Android) anuncian la feature
-        // bufferDeviceAddress pero NO exportan vkGetBufferDeviceAddress:
-        // getBufferAddress() llama entonces a un puntero de funcion nulo y
-        // el proceso muere con SIGSEGV en la direccion 0x0 (al cargar el
-        // modelo: ModelManager::alloc_params_buffers ->
-        // ggml_vk_create_buffer_device).
-        //
-        // La feature se apaga sin tocar nada mas: todos los usos estan
-        // protegidos por `if (device->buffer_device_address)`.
-        auto pfn_bda = (PFN_vkGetBufferDeviceAddress)
-            vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddress");
-        if (pfn_bda == nullptr) {
-            GGML_LOG_WARN("ggml_vulkan: the device does not expose vkGetBufferDeviceAddress; disabling buffer device address\n");
-            device->buffer_device_address = false;
-        } else {
-            const vk::BufferDeviceAddressInfo addressInfo(buf->buffer);
-            buf->bda_addr = device->device.getBufferAddress(addressInfo);
+        // Use the function pointer probed at device creation time.
+        // Prefer core vkGetBufferDeviceAddress, fall back to EXT variant.
+        auto pfn_bda = device->pfn_vkGetBufferDeviceAddress
+            ? device->pfn_vkGetBufferDeviceAddress
+            : device->pfn_vkGetBufferDeviceAddressEXT;
+        if (pfn_bda) {
+            const VkBufferDeviceAddressInfo addressInfo = { VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buf->buffer };
+            buf->bda_addr = pfn_bda(device->device, &addressInfo);
         }
     }
 
@@ -6966,6 +6959,21 @@ static vk_device ggml_vk_get_device(size_t idx) {
         if (device->device_fault) {
             device->pfn_vkGetDeviceFaultInfoEXT = (PFN_vkGetDeviceFaultInfoEXT)
                 vkGetDeviceProcAddr(device->device, "vkGetDeviceFaultInfoEXT");
+        }
+
+        // Probe buffer device address function pointers (core and EXT).
+        // Some drivers (Adreno 642L) advertise bufferDeviceAddress feature but
+        // return NULL for both vkGetBufferDeviceAddress and vkGetBufferDeviceAddressEXT.
+        if (device->buffer_device_address) {
+            device->pfn_vkGetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)
+                vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddress");
+            device->pfn_vkGetBufferDeviceAddressEXT = (PFN_vkGetBufferDeviceAddressEXT)
+                vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddressEXT");
+            if (device->pfn_vkGetBufferDeviceAddress == nullptr &&
+                device->pfn_vkGetBufferDeviceAddressEXT == nullptr) {
+                GGML_LOG_WARN("ggml_vulkan: device advertises bufferDeviceAddress but exposes neither vkGetBufferDeviceAddress nor vkGetBufferDeviceAddressEXT; disabling buffer device address\n");
+                device->buffer_device_address = false;
+            }
         }
 
         // Queues

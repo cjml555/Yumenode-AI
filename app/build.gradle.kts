@@ -133,7 +133,7 @@ dependencies {
     // usa, y el auto-apagado tras crash (GpuTrial) vuelve a CPU.
     // OJO: en Adreno el driver puede morir con SIGSEGV; eso NO se promete
     // arreglar, solo se contiene con el toggle + trial.
-    implementation("net.ladenthin:llama-android-vulkan:5.1.0")
+    implementation("net.ladenthin:llama-android-vulkan:6.0.0")
     // Markdown rendering for AI replies (bold/lists/headings/code/tables/links)
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")

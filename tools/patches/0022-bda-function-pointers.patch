@@ -1,0 +1,13 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan-types.h b/ggml/src/ggml-vulkan/ggml-vulkan-types.h
+index 5cf46c890..ec7145632 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan-types.h
++++ b/ggml/src/ggml-vulkan/ggml-vulkan-types.h
+@@ -709,6 +709,8 @@ struct vk_device_struct {
+     bool multi_add;
+     bool shader_int64;
+     bool buffer_device_address;
++    PFN_vkGetBufferDeviceAddress pfn_vkGetBufferDeviceAddress {};
++    PFN_vkGetBufferDeviceAddressEXT pfn_vkGetBufferDeviceAddressEXT {};
+     bool vulkan_memory_model;
+
+     bool add_rms_fusion;

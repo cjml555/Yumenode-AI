@@ -1,0 +1,16 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index xxxxxxx..xxxxxxx 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -16339,6 +16339,11 @@ static const struct ggml_backend_reg_i ggml_backend_vk_reg_i = {
+ };
+ 
+ ggml_backend_reg_t ggml_backend_vk_reg() {
++    // Guard: skip Vulkan probe if disabled via env (for CPU-only / n_gpu_layers <= 0)
++    if (getenv("GGML_VULKAN_DISABLE")) {
++        return nullptr;
++    }
++
+     static ggml_backend_reg reg = {
+         /* .api_version = */ GGML_BACKEND_API_VERSION,
+         /* .iface       = */ ggml_backend_vk_reg_i,

@@ -2,17 +2,32 @@ diff --git a/llama/src/main/cpp/jllama.cpp b/llama/src/main/cpp/jllama.cpp
 index 04049df..a099868 100644
 --- a/llama/src/main/cpp/jllama.cpp
 +++ b/llama/src/main/cpp/jllama.cpp
-@@ -970,10 +970,12 @@ static void load_model_impl(JNIEnv *env, jobject obj, jobjectArray jparams, jobj
- 
-     jctx->worker = std::thread([jctx]() {
-         JNIEnv *tenv;
-+        // GetEnv sigue la firma antigua (void**), pero AttachCurrentThread en
-+        // el NDK moderno pide JNIEnv**: cada uno necesita su cast.
-         jint res = g_vm->GetEnv((void **)&tenv, JNI_VERSION_1_6);
-         bool attached = false;
-         if (res == JNI_EDETACHED) {
--            res = g_vm->AttachCurrentThread((void **)&tenv, nullptr);
-+            res = g_vm->AttachCurrentThread(reinterpret_cast<JNIEnv **>(&tenv), nullptr);
-             if (res != JNI_OK) {
-                 jctx->worker_ready.store(true);
-                 return;
+@@ -385,7 +385,7 @@ JNIEnv *get_jni_env_attaching() noexcept {
+     const jint res = g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+     if (res == JNI_OK) {
+         return env;
+     }
+     if (res != JNI_EDETACHED) {
+         return nullptr;
+     }
+     char name[] = "jllama-log-worker"; // the JVM copies it; shows in thread dumps instead of Thread-N
+     JavaVMAttachArgs args = {JNI_VERSION_1_6, name, nullptr};
+-    if (g_vm->AttachCurrentThreadAsDaemon(reinterpret_cast<void **>(&env), &args) != JNI_OK) {
++    if (g_vm->AttachCurrentThreadAsDaemon(reinterpret_cast<JNIEnv **>(&env), &args) != JNI_OK) {
+         return nullptr;
+     }
+@@ -660,7 +660,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) try {
+     g_vm = vm;
+     JNIEnv *env = nullptr;
+
+-    if (JNI_OK != vm->GetEnv((void **)&env, JNI_VERSION_1_1)) {
++    if (JNI_OK != vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_1)) {
+         goto error;
+     }
+@@ -791,7 +791,7 @@ JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *vm, void *reserved) try {
+     JNIEnv *env = nullptr
+
+-    if (JNI_OK != vm->GetEnv((void **)&env, JNI_VERSION_1_6)) {
++    if (JNI_OK != vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6)) {
+         return;
+     }

@@ -61,7 +61,7 @@ void progressTrampoline(int step, int steps, float /*time*/, void* data) {
     JNIEnv* env = nullptr;
     bool attached = false;
     if (g_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
-        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) return;
+        if (g_vm->AttachCurrentThread(reinterpret_cast<JNIEnv**>(&env), nullptr) != JNI_OK || env == nullptr) return;
         attached = true;
     }
     env->CallVoidMethod(h->cb, h->cb_mid, static_cast<jint>(step), static_cast<jint>(steps));
@@ -82,7 +82,7 @@ void previewTrampoline(int step, int frame_count, sd_image_t* frames, bool /*is_
     JNIEnv* env = nullptr;
     bool attached = false;
     if (g_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
-        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) return;
+        if (g_vm->AttachCurrentThread(reinterpret_cast<JNIEnv**>(&env), nullptr) != JNI_OK || env == nullptr) return;
         attached = true;
     }
     const jsize n = static_cast<jsize>(im.width * im.height * 3u);
