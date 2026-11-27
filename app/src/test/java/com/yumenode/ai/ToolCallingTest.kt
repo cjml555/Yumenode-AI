@@ -4,6 +4,7 @@ package com.yumenode.ai
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -247,5 +248,44 @@ class ToolCallingTest {
 
     @Test fun `normalizeJsonOutput deja el texto si no hay JSON`() {
         assertEquals("hola", ToolCalling.normalizeJsonOutput("hola"))
+    }
+
+    @Test fun `normalizeJsonOutput quita vallas de un array`() {
+        val raw = "```json\n[\n  1,\n  2\n]\n```"
+        assertEquals("[\n  1,\n  2\n]", ToolCalling.normalizeJsonOutput(raw))
+    }
+
+    @Test fun `normalizeJsonOutput devuelve el array crudo tal cual`() {
+        assertEquals("[1,2,3]", ToolCalling.normalizeJsonOutput("[1,2,3]"))
+    }
+
+    @Test fun `normalizeJsonOutput extrae el JSON embebido entre texto`() {
+        val raw = "Claro, aqui esta: {\"a\":1} espero que sirva"
+        assertEquals("{\"a\":1}", ToolCalling.normalizeJsonOutput(raw))
+    }
+
+    @Test fun `normalizeJsonOutput extrae un array embebido`() {
+        assertEquals("[1,2]", ToolCalling.normalizeJsonOutput("resultado: [1,2] listo"))
+    }
+
+    @Test fun `isJsonValue distingue objeto y array`() {
+        assertTrue(ToolCalling.isJsonValue("{\"a\":1}"))
+        assertTrue(ToolCalling.isJsonValue("[1]"))
+        assertFalse(ToolCalling.isJsonValue("hola"))
+        assertFalse(ToolCalling.isJsonValue("{roto}"))
+    }
+
+    @Test fun `schemaTopType lee el tipo de primer nivel`() {
+        assertEquals("array", ToolCalling.schemaTopType("{\"type\":\"array\"}"))
+        assertEquals("object", ToolCalling.schemaTopType("{\"type\":\"object\",\"properties\":{}}"))
+        assertNull(ToolCalling.schemaTopType("{\"properties\":{}}"))
+        assertNull(ToolCalling.schemaTopType("no json"))
+    }
+
+    @Test fun `matchesTopType valida el tipo`() {
+        assertTrue(ToolCalling.matchesTopType("[1,2]", "array"))
+        assertFalse(ToolCalling.matchesTopType("{\"data\":[1,2]}", "array"))
+        assertTrue(ToolCalling.matchesTopType("{\"a\":1}", "object"))
+        assertFalse(ToolCalling.matchesTopType("[1]", "object"))
     }
 }

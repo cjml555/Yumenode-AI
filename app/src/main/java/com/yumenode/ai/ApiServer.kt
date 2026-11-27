@@ -595,7 +595,29 @@ class ApiServer(
                 }
             }
             var answer = parsed?.answer?.takeIf { parsed.call == null } ?: finalRaw
-            if (formatSchema != null) answer = ToolCalling.normalizeJsonOutput(answer)
+            if (formatSchema != null) {
+                answer = ToolCalling.normalizeJsonOutput(answer)
+                // Reintento correctivo: los modelos pequeños a veces envuelven el
+                // valor (p. ej. {"data": [...]} cuando el schema pide un array) o
+                // no devuelven JSON. Se repite una vez pidiendo el tipo exacto.
+                val wantType = ToolCalling.schemaTopType(formatSchema)
+                if (wantType != null && !ToolCalling.matchesTopType(answer, wantType)) {
+                    val opener = if (wantType == "array") "'['" else "'{'"
+                    val fixMsgs = effectiveMessages + ChatCore.Msg(
+                        "system",
+                        "Tu respuesta anterior no cumplia el schema: hacia falta un JSON de tipo " +
+                            "'$wantType'. Responde de nuevo SOLO con ese JSON, empezando por " +
+                            opener + " y sin vallas de codigo ni texto alrededor.",
+                    )
+                    val retry = runCatching {
+                        runBlocking {
+                            ChatCore.generate(fixMsgs, temperature, maxTokens, onDelta = {}, jsonSchema = schema)
+                        }
+                    }.getOrNull()
+                    val fixed = retry?.let { ToolCalling.normalizeJsonOutput(it) }
+                    if (fixed != null && ToolCalling.matchesTopType(fixed, wantType)) answer = fixed
+                }
+            }
             val usage = JSONObject()
                 .put("prompt_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length }))
                 .put("completion_tokens", estimateTokens(finalRaw.length))

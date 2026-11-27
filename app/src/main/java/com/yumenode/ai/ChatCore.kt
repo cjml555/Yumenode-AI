@@ -272,7 +272,9 @@ object ChatCore {
         // inválido, que se aceptó igual), así que el modo estricto se refuerza
         // con la instrucción de sistema que añade ApiServer.
         if (!jsonSchema.isNullOrBlank()) {
-            runCatching { params.withJsonSchema(jsonSchema) }
+            // El binding trae el conversor nativo schema->GBNF (llama.cpp), que
+            // genera gramaticas validas; escribirlo a mano fallaba en silencio.
+            runCatching { params.withGrammar(LlamaModel.jsonSchemaToGrammar(jsonSchema)) }
         }
 
         val sb = StringBuilder()

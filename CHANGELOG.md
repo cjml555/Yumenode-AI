@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`response_format` ahora sí devuelve el JSON pedido**: se usa el conversor nativo
+  `LlamaModel.jsonSchemaToGrammar` en vez de un GBNF escrito a mano, la instrucción de
+  sistema ya no provoca que el modelo copie el schema, la salida se limpia de vallas
+  (objetos **y arrays**, con extracción del JSON embebido) y hay un **reintento correctivo**
+  cuando el tipo de primer nivel no coincide (típico: `{"data":[...]}` cuando el schema pide
+  un array).
+
 ## [1.4.11] - 2026-11-27
 
 ### Added
