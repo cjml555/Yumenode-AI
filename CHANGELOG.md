@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-11-26
+
 ### Fixed
 - **Chat GGUF roto en v1.4.4 y v1.4.5**: el AAR local `llama-android-vulkan:6.0.0`
   empaquetaba el `classes.jar` de **5.1.0** junto al `libjllama.so` de **6.0.0**
