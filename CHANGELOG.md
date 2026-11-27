@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`tools/build-llama-vulkan.sh` reproducible otra vez**: empaqueta el AAR partiendo del
+  **AAR oficial de la misma versión** (antes usaba una plantilla 5.1.0 del historial, que es
+  lo que rompió el chat en 1.4.4/1.4.5) y parchea el cast de
+  `AttachCurrentThreadAsDaemon` que NDK r29 rechaza (`JNIEnv**` en vez de `void**`).
+  El AAR resultante (`local-maven/net/ladenthin/llama-android-vulkan/6.0.0`, 10.9 MB con
+  `libjllama.so` de 30.2 MB y Vulkan enlazado) **carga bien**: `JNI_OnLoad` pasa y el
+  driver Adreno arranca (`AdrenoVK-0: Application Name: ggml-vulkan`).
+
+### Known issues
+- **GPU en chat GGUF sigue sin ser viable en Adreno**: con el AAR consistente, cargar un
+  GGUF con backend GPU hace `SIGSEGV` en `jllama_model_load+328` (fault addr 0x0) en el
+  Edge 50 Fusion (Adreno 710). El auto-apagado (`GpuTrial`) sí funciona: tras el crash la
+  app arranca en CPU con `gpuExperimental=false`. Por eso la app sigue empaquetando el AAR
+  oficial **CPU**; el AAR con Vulkan queda en `local-maven/` para quien quiera probarlo en
+  otro SoC (Mali/serie 8 con mejor driver).
+
 ## [1.4.9] - 2026-11-26
 
 ### Added

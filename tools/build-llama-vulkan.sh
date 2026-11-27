@@ -22,7 +22,8 @@ OUT=${OUT:-/home/jhon/Yumenode-AI/build/jllama-vulkan}
 REPO=${REPO:-$(cd "$(dirname "$0")/.." && pwd)}
 THIRDPARTY="$REPO/app/src/main/cpp/thirdparty/include"
 MAVEN_DIR="$REPO/local-maven/net/ladenthin/llama-android-vulkan/6.0.0"
-TEMPLATE_VER="5.1.0"
+VER="6.0.0"                     # version de java-llama.cpp Y del AAR oficial (deben coincidir)
+MAVEN_URL="https://repo1.maven.org/maven2/net/ladenthin/llama-android/$VER/llama-android-$VER.aar"
 
 # ── Clonar fuentes si no estan ──
 if [ ! -f "$JLC/CMakeLists.txt" ]; then
@@ -79,6 +80,18 @@ apply_patch() { # $1=repo $2=patch
 # Nuestros parches custom (0022, 0023, 0024) están en $JLC/patches/ y se aplican automáticamente.
 cmake -DPATCH_DIR="$JLC/patches" -DLLAMA_SRC="$LLAMA_SRC" \
     -P "$JLC/cmake/apply-llama-patches.cmake"
+# NDK r29: AttachCurrentThreadAsDaemon declara JNIEnv** (las NDK viejas, void**).
+# java-llama.cpp v6.0.0 pasa un reinterpret_cast<void**> y el compilador lo rechaza.
+python3 - "$JLC/src/main/cpp/jllama.cpp" <<'PYFIX'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+n = s.count("AttachCurrentThreadAsDaemon(reinterpret_cast<void **>(&env)")
+s = s.replace("AttachCurrentThreadAsDaemon(reinterpret_cast<void **>(&env)",
+              "AttachCurrentThreadAsDaemon(&env")
+open(p, "w", encoding="utf-8").write(s)
+print("jllama.cpp: casts AttachCurrentThreadAsDaemon corregidos:", n)
+PYFIX
 # NO aplicamos 0001 ni 0002: ya integrados/fixeados
 
 cmake -S "$JLC" -B "$BUILD" \
@@ -131,18 +144,35 @@ readelf -d "$OUT/libjllama.so" | grep NEEDED
 # sustituye la libreria nativa por la recien compilada. Si la plantilla no
 # existe, el script falla: no se inventa un AAR.
 AAR_TMP=$(mktemp -d)
-git -C "$REPO" show b26ce0b:local-maven/net/ladenthin/llama-android-vulkan/$TEMPLATE_VER/llama-android-vulkan-$TEMPLATE_VER.aar > "$AAR_TMP/base.aar" \
-    || { echo "NO SE PUDO EXTRAER LA PLANTILLA DEL AAR"; exit 1; }
-mkdir -p "$AAR_TMP/aar/jni/arm64-v8a"
-cd "$AAR_TMP/aar" && unzip -q "$AAR_TMP/base.aar"
+# Base = AAR OFICIAL de la MISMA version (classes.jar, manifest, R.txt, proguard).
+# Se cachea para no bajarlo en cada build.
+BASE_AAR="$BUILD/llama-android-$VER.aar"
+if [ ! -f "$BASE_AAR" ]; then
+    echo "descargando AAR oficial $VER -> $BASE_AAR"
+    curl -fsSL "$MAVEN_URL" -o "$BASE_AAR" || { echo "NO SE PUDO DESCARGAR EL AAR OFICIAL"; exit 1; }
+fi
+mkdir -p "$AAR_TMP/aar"
+cd "$AAR_TMP/aar" && unzip -q "$BASE_AAR"
+# Solo arm64-v8a (el APK filtra esa ABI) y con NUESTRO libjllama con Vulkan.
+rm -rf jni && mkdir -p jni/arm64-v8a
 cp "$OUT/libjllama.so" jni/arm64-v8a/libjllama.so
-zip -qr "$AAR_TMP/llama-android-vulkan-6.0.0.aar" . -x "*.DS_Store"
+# Reempaquetar (zip no está garantizado en todas las distros: python3 siempre está)
+python3 - "$AAR_TMP" "$AAR_TMP/llama-android-vulkan-$VER.aar" <<'PYZIP'
+import os, sys, zipfile
+root, out = sys.argv[1] + "/aar", sys.argv[2]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for base, _dirs, files in os.walk(root):
+        for f in files:
+            p = os.path.join(base, f)
+            z.write(p, os.path.relpath(p, root))
+print("aar:", out)
+PYZIP
 mkdir -p "$MAVEN_DIR"
-cp "$AAR_TMP/llama-android-vulkan-6.0.0.aar" "$MAVEN_DIR/"
-git -C "$REPO" show b26ce0b:local-maven/net/ladenthin/llama-android-vulkan/$TEMPLATE_VER/llama-android-vulkan-$TEMPLATE_VER.pom > "$MAVEN_DIR/llama-android-vulkan-6.0.0.pom" \
-    || { echo "NO SE PUDO EXTRAER EL POM"; exit 1; }
-# Actualizar versión en POM de 5.1.0 a 6.0.0
-sed -i 's|<version>5.1.0</version>|<version>6.0.0</version>|' "$MAVEN_DIR/llama-android-vulkan-6.0.0.pom"
+cp "$AAR_TMP/llama-android-vulkan-$VER.aar" "$MAVEN_DIR/"
+# POM: el oficial con nuestras coordenadas (mismas dependencias que las clases)
+curl -fsSL "https://repo1.maven.org/maven2/net/ladenthin/llama-android/$VER/llama-android-$VER.pom" \
+    | sed "s|<artifactId>llama-android</artifactId>|<artifactId>llama-android-vulkan</artifactId>|" \
+    > "$MAVEN_DIR/llama-android-vulkan-$VER.pom" || { echo "NO SE PUDO GENERAR EL POM"; exit 1; }
 rm -rf "$AAR_TMP"
 echo "=== AAR listo: $MAVEN_DIR/llama-android-vulkan-6.0.0.aar ==="
 ls -la "$MAVEN_DIR/"
