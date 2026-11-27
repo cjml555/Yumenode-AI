@@ -205,7 +205,7 @@ powershell -File tools/build-release.ps1
 ## 🧩 Limitaciones Conocidas
 
 - El contexto de chat predeterminado es 4096 tokens (ajustable en la página de modelos).
-- Chat `.gguf` corre en CPU por defecto. Hay un opt-in experimental de GPU Vulkan (Ajustes > Dispositivo > «GPU experimental (Vulkan)», apagado por defecto): si el driver falla, la app puede cerrarse de forma inesperada; en el siguiente arranque la GPU se apaga sola y la app sigue en CPU. Sin Vulkan en el dispositivo el toggle viene deshabilitado. **Esta iteración no se probó en dispositivo (QA diferida por el owner): no hay garantía de velocidad ni de estabilidad en ningún SoC, incluido Adreno 619.**
+- El chat `.gguf` corre **siempre en CPU**: el AAR oficial de llama.cpp que se empaqueta no lleva backend Vulkan (el AAR propio con Vulkan se retiró en 1.4.6 porque hacía SIGSEGV al cargar el modelo). El dibujo usa CPU por defecto; el toggle «GPU experimental (Vulkan)» de Ajustes > Dispositivo, **activado por defecto**, decide si el dibujo intenta Vulkan: si el driver falla, la app puede cerrarse de forma inesperada y en el siguiente arranque la GPU se apaga sola. Sin Vulkan en el dispositivo el toggle viene deshabilitado.
 - La variante OpenCL del binding existe, pero en Adreno 619 (SM6450) el driver de Qualcomm (`libllvm-qcom.so`) hace **SIGSEGV** al compilar los kernels de `ggml`: probado en dispositivo, no es viable sin aislar el proceso.
 - El dibujo usa CPU por defecto. La GPU (Vulkan) **inicializa** (`backend: Vulkan0`), pero en Adreno 619 la generacion hace **SIGSEGV** en `ggml_backend_buft_alloc_buffer` (puntero nulo): no usable en ese driver. En otros SoC requiere validacion.
 - El Tagger se carga bajo demanda (consume cientos de MB).

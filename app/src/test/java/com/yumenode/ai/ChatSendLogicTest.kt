@@ -1,6 +1,8 @@
 package com.yumenode.ai
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -23,24 +25,49 @@ class ChatSendLogicTest {
     @Test fun both_empty_returns_empty() =
         assertEquals("", ChatSendLogic.composeSendText("", ""))
 
-    // ── computeSeedTitle: title fallback (doSend L3442–3445, take(18)) ────────
-    @Test fun placeholder_with_text_seeds_from_text_capped_18() {
-        val t = "abcdefghijklmnopqrstuvwxyz0123456789"
-        assertEquals("abcdefghijklmnopqr", ChatSendLogic.computeSeedTitle(
-            text = t, firstFileName = null,
-            defaultTitle = "New chat", isPlaceholderTitle = true))
+    // ── computeSeedTitle / summarizeTitle: título desde el primer envío ──────
+    @Test fun placeholder_with_text_seeds_from_summary() {
+        assertEquals("Explícame cómo funciona Klipper",
+            ChatSendLogic.computeSeedTitle(
+                text = "explícame cómo funciona Klipper",
+                firstFileName = null, defaultTitle = "Nuevo chat", isPlaceholderTitle = true))
+    }
+
+    @Test fun summarize_collapses_newlines_and_spaces() {
+        assertEquals("Hola mundo", ChatSendLogic.summarizeTitle("hola\n\n   mundo"))
+    }
+
+    @Test fun summarize_drops_code_fences_and_urls() {
+        val t = "mira https://ejemplo.com/x y ```code``` esto"
+        assertEquals("Mira y esto", ChatSendLogic.summarizeTitle(t))
+    }
+
+    @Test fun summarize_caps_at_word_boundary() {
+        val t = "esta es una frase bastante larga que debería recortarse en alguna palabra"
+        val out = ChatSendLogic.summarizeTitle(t)
+        assertTrue("len=${out.length}", out.length <= 40)
+        assertFalse("corte a media palabra: $out", out.endsWith("palab"))
+    }
+
+    @Test fun summarize_keeps_opening_question_mark_and_capitalizes() {
+        assertEquals("¿Qué es un nodo?", ChatSendLogic.summarizeTitle("¿qué es un nodo?"))
+    }
+
+    @Test fun summarize_empty_when_only_code_or_url() {
+        assertEquals("", ChatSendLogic.summarizeTitle("```solo codigo```"))
+        assertEquals("", ChatSendLogic.summarizeTitle("https://solo.url/x"))
     }
 
     @Test fun placeholder_empty_text_falls_back_to_firstFile() {
         assertEquals("model.gguf", ChatSendLogic.computeSeedTitle(
             text = "", firstFileName = "model.gguf",
-            defaultTitle = "New chat", isPlaceholderTitle = true))
+            defaultTitle = "Nuevo chat", isPlaceholderTitle = true))
     }
 
     @Test fun placeholder_empty_text_and_file_falls_back_to_default() {
-        assertEquals("New chat", ChatSendLogic.computeSeedTitle(
+        assertEquals("Nuevo chat", ChatSendLogic.computeSeedTitle(
             text = "", firstFileName = null,
-            defaultTitle = "New chat", isPlaceholderTitle = true))
+            defaultTitle = "Nuevo chat", isPlaceholderTitle = true))
     }
 
     @Test fun non_placeholder_returns_default_untouched() {
@@ -49,10 +76,11 @@ class ChatSendLogicTest {
             defaultTitle = "Previous session title", isPlaceholderTitle = false))
     }
 
-    @Test fun seeded_title_never_exceeds_18_chars() {
-        assertEquals(18, ChatSendLogic.computeSeedTitle(
-            text = "this is a very very long user prompt", firstFileName = null,
-            defaultTitle = "New chat", isPlaceholderTitle = true).length)
+    @Test fun seeded_title_never_exceeds_40_chars() {
+        val out = ChatSendLogic.computeSeedTitle(
+            text = "this is a very very long user prompt with many many words inside",
+            firstFileName = null, defaultTitle = "Nuevo chat", isPlaceholderTitle = true)
+        assertTrue("len=${out.length}", out.length <= 40)
     }
 
     // ── countImages: userImage "|" split (doSend L3372, tagHint L320) ────────
@@ -77,5 +105,13 @@ class ChatSendLogicTest {
     @Test fun buildTagHint_zero_then_prompt() {
         val rendered = ChatSendLogic.buildTagHint(0, "Noticed %d images", "TOOL")
         assertEquals("Noticed 0 images\nTOOL", rendered)
+    }
+
+    @Test fun placeholder_detected_across_language() {
+        // Sesión creada en inglés y app en español (el caso real que dejó títulos sin actualizar)
+        assertTrue(ChatSendLogic.isPlaceholderTitle("New chat", "Nuevo chat"))
+        assertTrue(ChatSendLogic.isPlaceholderTitle("Nuevo chat", "Nuevo chat"))
+        assertTrue(ChatSendLogic.isPlaceholderTitle("  ", "Nuevo chat"))
+        assertFalse(ChatSendLogic.isPlaceholderTitle("Explica qué es un nodo", "Nuevo chat"))
     }
 }

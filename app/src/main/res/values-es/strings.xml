@@ -604,4 +604,22 @@
     <string name="s_586">Reenvía las peticiones a dispositivos de tu red local para compartir el modelo entre teléfonos</string>
     <string name="s_587">Editar pares del clúster</string>
     <string name="s_588">URLs de pares (una por línea, http://IP:puerto)</string>
+
+    <string name="s_078_gpu">Modelo de chat cargado (llama.cpp · GPU Vulkan · reutilización KV)</string>
+    <string name="s_553">Cuantización del KV cache (GGUF)</string>
+    <string name="s_554">%1$s · se aplica la próxima vez que cargues el modelo</string>
+    <string name="s_555">Modo de memoria al dibujar</string>
+    <string name="s_556">Alta velocidad</string>
+    <string name="s_557">Poca memoria</string>
+    <string name="s_558">En modo poca memoria se cargan el codificador de texto, la UNet y el VAE de uno en uno, así que solo uno está en RAM. Un modelo grande cabe en el móvil; puede ir más lento si el sistema tiene que releer páginas del almacenamiento. Se aplica la próxima vez que cargues el modelo.</string>
+    <string name="s_560">La GPU experimental está apagada: actívala en Ajustes &gt; Dispositivo si quieres probarla. El modelo corre en CPU.</string>
+    <string name="s_568">Prompts personalizados</string>
+    <string name="s_569">Prompts personalizados</string>
+    <string name="s_570">Nombre</string>
+    <string name="s_571">Prompt</string>
+    <string name="s_572">Guardar</string>
+    <string name="s_573">Rellena los dos campos</string>
+    <string name="s_574">Copiar</string>
+    <string name="s_share_text">Texto recibido de otra app</string>
+    <string name="s_share_image">Imagen adjunta desde otra app</string>
 </resources>

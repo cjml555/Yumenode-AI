@@ -342,11 +342,14 @@ import com.yumenode.ai.tagRolesGguf
             }
             full.isNotEmpty() -> {
                 // tps: estimación ~4 chars/token; nota itálica al pie (no persistida en turn.answer)
+                // Incluye runtime + backend y nombre del modelo para saber con qué se generó.
                 val elapsed = SystemClock.uptimeMillis() - genStart
                 val foot = if (elapsed >= 50 && ans.isNotEmpty()) {
                     val tok = ans.length / 4.0
-                    "\n\n_≈" + "%.1f".format(tok / (elapsed / 1000.0)) + " tok/s · " +
-                        "%.1f".format(elapsed / 1000.0) + "s_"
+                    val head = "≈" + "%.1f".format(tok / (elapsed / 1000.0)) + " tok/s · " +
+                        "%.1f".format(elapsed / 1000.0) + " s"
+                    val meta = ChatCore.perfMeta()
+                    "\n\n_" + (if (meta.isNullOrEmpty()) head else "$head · $meta") + "_"
                 } else null
                 lastTpsFoot = foot
                 markwonFull.setMarkdown(ai.answer, if (foot != null) full + foot else full)
@@ -415,13 +418,15 @@ import com.yumenode.ai.tagRolesGguf
             // Store the files' raw content in this turn, so "regenerate" can restore the attachments back into the bar
             turn.fileStore = chatManager.encodeFiles(attachmentHandler.getPendingFiles())
         }
-        if (current.title == getString(R.string.s_109)) {
+        if (ChatSendLogic.isPlaceholderTitle(current.title, getString(R.string.s_109))) {
             current.title = ChatSendLogic.computeSeedTitle(
                 text = text,
                 firstFileName = fileNames.firstOrNull(),
                 defaultTitle = getString(R.string.s_278),
                 isPlaceholderTitle = true,
             )
+            refreshDrawer()
+            sessionManager.save()
         }
 
         if (attachJpegs.isNotEmpty()) {

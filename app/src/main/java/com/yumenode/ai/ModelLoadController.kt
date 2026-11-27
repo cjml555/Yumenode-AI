@@ -135,7 +135,10 @@ class ModelLoadController(private val host: ModelLoadHost) : ThemeAliases {
             host.llamaModel = m
             GpuTrial.clear(host.chatPrefs())
             host.visionOk = vok
-            ChatCore.attachGguf(m, path.substringAfterLast('/'), vok)
+            ChatCore.attachGguf(
+                m, path.substringAfterLast('/'), vok,
+                backend = "llama.cpp " + if (onGpu) "Vulkan" else "CPU",
+            )
             ChatCore.setGpuPriority(host.prefBool(KEY_GPU_PRIORITY, false))
             host.modelSupportsThinking =
                 host.guessSupportsThinking(path.substringAfterLast('/'))
@@ -199,7 +202,10 @@ class ModelLoadController(private val host: ModelLoadHost) : ThemeAliases {
         host.activity.runOnUiThread {
             host.engine = eng
             host.llamaModel = null
-            ChatCore.attachLiteRt(eng, path.substringAfterLast('/'), vok)
+            ChatCore.attachLiteRt(
+                eng, path.substringAfterLast('/'), vok,
+                backend = "LiteRT-LM " + usedBackendName,
+            )
             ChatCore.setGpuPriority(host.prefBool(KEY_GPU_PRIORITY, false))
             host.modelSupportsThinking = host.probeThinking(path)
             host.markModelLoaded(path)

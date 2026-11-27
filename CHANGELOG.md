@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Nota de rendimiento con backend y modelo**: el pie de cada respuesta pasa de
+  `≈16.5 tok/s · 0.5s` a `≈16.5 tok/s · 24.2 s · llama.cpp CPU · qwen2.5-0.5b-instruct-q4_k…`
+  (`ChatCore.perfMeta()`, alimentado por el backend real con el que se cargó el modelo).
+- **Nombre automático de la sesión**: en el primer envío el título se resume a partir del
+  mensaje (sin coste de inferencia): colapsa saltos/espacios, quita código y URLs, corta en
+  límite de palabra a 40 caracteres y capitaliza. Antes eran los primeros 18 caracteres
+  crudos y, si la sesión venía de otro idioma (`New chat` guardado con la app en español),
+  **nunca se renombraba**: ahora el placeholder se detecta por idioma.
+- **Share-target**: la app acepta `ACTION_SEND` de `text/plain` e `image/*`; el texto cae
+  en el campo de entrada y las imágenes se añaden como adjunto pendiente, abriendo Chat.
+
+### Fixed
+- Ajustes: los textos `KV cache quantization (GGUF)`, `Drawing memory mode`, avisos de GPU y
+  de prompts personalizados estaban **en inglés** con la app en español. `values-es` ya
+  cubre las 606 claves.
+- README: el toggle de GPU decía «apagado por defecto» y el chat GGUF «en CPU por defecto»;
+  ahora refleja el comportamiento real (GPU solo para dibujo y activada por defecto; chat
+  GGUF siempre en CPU desde 1.4.6).
+
 ## [1.4.8] - 2026-11-26
 
 ### Fixed
