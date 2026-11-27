@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-11-26
+
+### Fixed
+- **El botón de enviar del chat cargaba/descargaba el modelo en vez de enviar**: en
+  `dd3c7e6` (refactor de `ModelLoadController`) `onSendOrStop()` pasó a delegar en
+  `modelLoadController.toggleLoad()`, así que pulsar ↑ con un modelo cargado lo
+  **liberaba** ("Modelo de chat liberado") y sin modelo no enviaba nada. Ahora
+  `MainActivity.sendOrStop()` restaura el comportamiento original: si hay generación en
+  curso la detiene (cancela el lado nativo, resetea `busy` y la UI de stop) y si no,
+  envía el mensaje.
+  Verificado en el Edge 50 Fusion: «di hola» → respuesta con ≈16.5 tok/s · 0.5 s y el
+  modelo sigue cargado; sin modelo, avisa «Selecciona primero un archivo de modelo de
+  chat» sin tocar el estado del modelo.
+
 ## [1.4.7] - 2026-11-26
 
 ### Added

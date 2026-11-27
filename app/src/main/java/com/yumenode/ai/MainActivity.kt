@@ -148,7 +148,31 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             this@MainActivity.onAttachClick()
         }
         override fun onSendOrStop() {
-            modelLoadController.toggleLoad()
+            sendOrStop()
+        }
+    }
+
+    /**
+     * Botón ↑ del chat: envía el mensaje o detiene la generación en curso.
+     *
+     * Regresión: en dd3c7e6 se cambió por `modelLoadController.toggleLoad()`, así
+     * que pulsar enviar cargaba o descargaba el modelo en vez de enviar.
+     */
+    internal fun sendOrStop() {
+        val job = genJob
+        if (job != null && job.isActive) {
+            // Detener primero el lado nativo: cancelar solo el Flow deja el hilo
+            // de inferencia corriendo y el siguiente envío se cuelga.
+            stopRequested = true
+            runCatching { ChatCore.requestCancel() }
+            drawPageInternal?.cancel()
+            job.cancel()
+            genJob = null
+            if (busy) applyBusy(false)
+            setStoppingUi(false)
+            toast(getString(R.string.s_083))
+        } else {
+            doSend()
         }
     }
 
