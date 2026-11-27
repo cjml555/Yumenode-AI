@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `tools/api-smoke.sh`: smoke test de la API contra el dispositivo (12 comprobaciones:
+  health, modelos, chat, stream, usage, tools, response_format, determinismo con seed,
+  `/v1/completions`, 429 y, con `EMBEDDINGS=1`, embeddings). Sale con código 0 solo si todo pasa.
+
 ### Fixed
 - **`finish_reason` real**: se lee el motivo de parada que reporta llama.cpp en el stream
   (`StopReason`) y se traduce al contrato OpenAI: `"length"` cuando se agota `max_tokens`,
