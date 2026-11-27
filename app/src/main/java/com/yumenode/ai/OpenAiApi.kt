@@ -110,12 +110,14 @@ object OpenAiApi {
         created: Long,
         answer: String,
         usage: JSONObject,
+        /** "stop" o "length" (se agoto max_tokens). */
+        finishReason: String = "stop",
     ): JSONObject = JSONObject()
         .put("id", id).put("object", "chat.completion").put("created", created).put("model", model)
         .put("choices", JSONArray().put(JSONObject()
             .put("index", 0)
             .put("message", JSONObject().put("role", "assistant").put("content", answer))
-            .put("finish_reason", "stop")))
+            .put("finish_reason", finishReason)))
         .put("usage", usage)
 
     /**

@@ -631,7 +631,7 @@ class ApiServer(
                 )
                 respondJson(s, 200, OpenAiApi.chatCompletionToolCalls(id, model, created, calls, usage))
             } else {
-                respondJson(s, 200, OpenAiApi.chatCompletion(id, model, created, answer, usage))
+                respondJson(s, 200, OpenAiApi.chatCompletion(id, model, created, answer, usage, ChatCore.stopReason))
             }
             return
         }
@@ -686,7 +686,7 @@ class ApiServer(
                         onDelta = { piece -> deltaEvent(piece) }, opts = opts,
                     )
                 }
-                event(OpenAiApi.chatChunkFinish(id, model, created))
+                event(OpenAiApi.chatChunkFinish(id, model, created, ChatCore.stopReason))
             }
             emitUsage()
             if (!broke) writeChunk(out, OpenAiApi.SSE_DONE)
