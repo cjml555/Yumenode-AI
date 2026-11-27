@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-11-26
+
 ### Added
 - **Nota de rendimiento con backend y modelo**: el pie de cada respuesta pasa de
   `≈16.5 tok/s · 0.5s` a `≈16.5 tok/s · 24.2 s · llama.cpp CPU · qwen2.5-0.5b-instruct-q4_k…`
