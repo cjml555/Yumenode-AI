@@ -84,6 +84,12 @@ formato OpenAI. Esto permite apuntar un agente local (OpenCode, Hermes, Codex, e
 al modelo del teléfono:
 
 - `GET /health`, `GET /v1/models`, `POST /v1/chat/completions` (soporta `stream` SSE).
+- **Tool calling** (`tools` / `tool_choice`, formato OpenAI): solo con backend **GGUF**.
+  El modelo recibe la descripción de las herramientas y se le obliga a responder un
+  JSON válido (`withJsonSchema`, decodificación restringida), que la app traduce a
+  `tool_calls` con `finish_reason: "tool_calls"`. Acepta historial con rol `tool`
+  (el resultado se entrega al modelo como texto etiquetado). En streaming, la llamada
+  llega en un único chunk con los argumentos completos.
 - Puerto por defecto **8080** (configurable en la app).
 - Auth opcional `Authorization: Bearer <key>`; la key se genera en
   **Models → API → New key**. Sin key, no hay comprobación (solo LAN de confianza).

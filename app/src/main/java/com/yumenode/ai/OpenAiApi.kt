@@ -142,12 +142,64 @@ object OpenAiApi {
     }
 
     /**
-     * Ultimo chunk del streaming: delta vacio y `finish_reason` "stop".
+     * Ultimo chunk del streaming: delta vacio y `finish_reason` ("stop" por
+     * defecto, "tool_calls" cuando el modelo pidio herramientas).
      */
-    fun chatChunkFinish(id: String, model: String, created: Long): JSONObject = JSONObject()
+    fun chatChunkFinish(id: String, model: String, created: Long, reason: String = "stop"): JSONObject = JSONObject()
         .put("id", id).put("object", "chat.completion.chunk").put("created", created).put("model", model)
         .put("choices", JSONArray().put(JSONObject()
-            .put("index", 0).put("delta", JSONObject()).put("finish_reason", "stop")))
+            .put("index", 0).put("delta", JSONObject()).put("finish_reason", reason)))
+
+    // ==================== Tool calling ====================
+
+    /** Entrada `tool_calls[]` de OpenAI con argumentos ya serializados. */
+    fun toolCall(id: String, name: String, arguments: String): JSONObject = JSONObject()
+        .put("id", id)
+        .put("type", "function")
+        .put("function", JSONObject().put("name", name).put("arguments", arguments))
+
+    /**
+     * Respuesta no-streaming que pide herramientas: `content` va a null y la
+     * eleccion lleva `tool_calls` con `finish_reason` "tool_calls".
+     */
+    fun chatCompletionToolCalls(
+        id: String,
+        model: String,
+        created: Long,
+        calls: JSONArray,
+        usage: JSONObject,
+    ): JSONObject = JSONObject()
+        .put("id", id).put("object", "chat.completion").put("created", created).put("model", model)
+        .put("choices", JSONArray().put(JSONObject()
+            .put("index", 0)
+            .put("message", JSONObject()
+                .put("role", "assistant")
+                .put("content", JSONObject.NULL)
+                .put("tool_calls", calls))
+            .put("finish_reason", "tool_calls")))
+        .put("usage", usage)
+
+    /** Chunk de streaming con las llamadas completas (una sola emision). */
+    fun chatChunkToolCalls(id: String, model: String, created: Long, calls: JSONArray): JSONObject {
+        val indexed = JSONArray()
+        for (i in 0 until calls.length()) {
+            val c = calls.getJSONObject(i)
+            val fn = c.getJSONObject("function")
+            indexed.put(JSONObject()
+                .put("index", i)
+                .put("id", c.getString("id"))
+                .put("type", "function")
+                .put("function", JSONObject()
+                    .put("name", fn.getString("name"))
+                    .put("arguments", fn.getString("arguments"))))
+        }
+        return JSONObject()
+            .put("id", id).put("object", "chat.completion.chunk").put("created", created).put("model", model)
+            .put("choices", JSONArray().put(JSONObject()
+                .put("index", 0)
+                .put("delta", JSONObject().put("tool_calls", indexed))
+                .put("finish_reason", JSONObject.NULL)))
+    }
 
     /**
      * Envoltorio de un chunk en el formato de Server-Sent Events.

@@ -360,24 +360,54 @@ class ApiServer(
         val id = "chatcmpl-" + System.nanoTime().toString(36)
         val created = System.currentTimeMillis() / 1000
         served++
+
+        // ---- Tool calling (solo GGUF: usa decodificación restringida) ----
+        // El modelo no habla el protocolo de herramientas de ningún proveedor:
+        // se le describe cada tool en un mensaje de sistema y se le obliga a
+        // responder un JSON válido (withJsonSchema); luego se traduce a
+        // `tool_calls` de OpenAI.
+        val tools = if (ChatCore.supportsJsonSchema() && ToolCalling.toolsAllowed(req)) {
+            ToolCalling.parseTools(req)
+        } else emptyList()
+        val forcedTool = if (tools.isEmpty()) null else ToolCalling.forcedTool(req)
+        // Si el último mensaje es el resultado de una herramienta, se le pide al
+        // modelo que responda con esa información en vez de volver a llamarla.
+        val afterToolResult = messages.lastOrNull()?.role == "tool"
+        val effectiveMessages = if (tools.isEmpty()) messages else
+            ToolCalling.normalize(messages) +
+                ChatCore.Msg("system", ToolCalling.instructions(tools, forcedTool, afterToolResult))
+        val schema = if (tools.isEmpty()) null else ToolCalling.responseSchema(tools, forcedTool)
+
         val preview = messages.lastOrNull { it.role == "user" }?.text?.take(40)?.replace("\n", " ") ?: ""
-        lastRequest = "#$served ${if (stream) "stream" else "once"} · $preview"
+        lastRequest = "#$served ${if (stream) "stream" else "once"}" +
+            (if (tools.isNotEmpty()) " · tools(${tools.size})" else "") + " · $preview"
 
         if (!stream) {
-            val answer = runCatching {
-                runBlocking { ChatCore.generate(messages, temperature, maxTokens) { } }
+            val raw = runCatching {
+                runBlocking { ChatCore.generate(
+                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema
+                ) }
             }.getOrElse { e ->
                 respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
                 return
             }
+            val parsed = if (tools.isEmpty()) null else ToolCalling.parseOutput(raw)
+            val answer = parsed?.answer?.takeIf { parsed.call == null } ?: raw
             val usage = JSONObject()
-                .put("prompt_tokens", estimateTokens(messages.sumOf { it.text.length }))
-                .put("completion_tokens", estimateTokens(answer.length))
-                .put("total_tokens", estimateTokens(messages.sumOf { it.text.length } + answer.length))
-            respondJson(s, 200, OpenAiApi.chatCompletion(id, model, created, answer, usage))
+                .put("prompt_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length }))
+                .put("completion_tokens", estimateTokens(raw.length))
+                .put("total_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length } + raw.length))
+            val call = parsed?.call
+            if (call != null) {
+                val calls = JSONArray().put(
+                    OpenAiApi.toolCall("call_" + System.nanoTime().toString(36), call.name, call.arguments)
+                )
+                respondJson(s, 200, OpenAiApi.chatCompletionToolCalls(id, model, created, calls, usage))
+            } else {
+                respondJson(s, 200, OpenAiApi.chatCompletion(id, model, created, answer, usage))
+            }
             return
         }
-
         // ---- SSE streaming ----
         val out = s.getOutputStream()
         writeHead(out, 200, "text/event-stream")
@@ -394,13 +424,33 @@ class ApiServer(
         }
         try {
             deltaEvent("", role = "assistant")
-            runBlocking {
-                ChatCore.generate(messages, temperature, maxTokens) { piece -> deltaEvent(piece) }
-            }
-            if (!broke) {
+            if (tools.isNotEmpty()) {
+                // Con herramientas el JSON solo es válido al terminar: se
+                // acumula y se emite una única entrada tool_calls completa.
+                val raw = runBlocking { ChatCore.generate(
+                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema
+                ) }
+                val call = ToolCalling.parseOutput(raw).call
+                if (call != null) {
+                    val calls = JSONArray().put(
+                        OpenAiApi.toolCall("call_" + System.nanoTime().toString(36), call.name, call.arguments)
+                    )
+                    event(OpenAiApi.chatChunkToolCalls(id, model, created, calls))
+                    event(OpenAiApi.chatChunkFinish(id, model, created, "tool_calls"))
+                } else {
+                    deltaEvent(raw)
+                    event(OpenAiApi.chatChunkFinish(id, model, created))
+                }
+            } else {
+                runBlocking {
+                    ChatCore.generate(
+                        effectiveMessages, temperature, maxTokens,
+                        onDelta = { piece -> deltaEvent(piece) }
+                    )
+                }
                 event(OpenAiApi.chatChunkFinish(id, model, created))
-                writeChunk(out, OpenAiApi.SSE_DONE)
             }
+            if (!broke) writeChunk(out, OpenAiApi.SSE_DONE)
         } catch (e: Throwable) {
             if (!broke) {
                 event(OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))

@@ -119,6 +119,8 @@ object ChatCore {
         temperature: Float?,
         maxTokens: Int?,
         onDelta: (String) -> Unit,
+        /** JSON Schema para decodificación restringida (solo GGUF llama.cpp). */
+        jsonSchema: String? = null,
     ): String = lock.withLock {
         busy = true
         cancelFlag = false
@@ -128,13 +130,16 @@ object ChatCore {
                 if (eng != null) runLiteRt(eng, messages, temperature, maxTokens, onDelta)
                 else {
                     val lm = llama ?: throw IllegalStateException("未加载对话模型")
-                    runGguf(lm, messages, temperature, maxTokens, onDelta)
+                    runGguf(lm, messages, temperature, maxTokens, onDelta, jsonSchema)
                 }
             }
         } finally {
             busy = false
         }
     }
+
+    /** true si el backend cargado admite decodificación restringida (GGUF). */
+    fun supportsJsonSchema(): Boolean = llama != null
 
     // ==================== LiteRT-LM path ====================
 
@@ -198,6 +203,7 @@ object ChatCore {
         temperature: Float?,
         maxTokens: Int?,
         onDelta: (String) -> Unit,
+        jsonSchema: String? = null,
     ): String {
         val sys = messages.filter { it.role == "system" }.joinToString("\n") { it.text }.trim()
         val turns = messages.filter { it.role != "system" && it.text.isNotEmpty() }
@@ -221,6 +227,12 @@ object ChatCore {
             .withTopP(0.95f)
             .withRepeatPenalty(1.1f)
             .withSeed((System.nanoTime() and 0x7FFFFFFF).toInt())
+
+        // Decodificación restringida: la gramática derivada del JSON Schema hace
+        // que el modelo solo pueda emitir un objeto válido (tool calling).
+        if (!jsonSchema.isNullOrBlank()) {
+            runCatching { params.withJsonSchema(jsonSchema) }
+        }
 
         val sb = StringBuilder()
         // gguf thinking content is mixed into the main stream; use the same state machine as the UI to split, only pass main text to client

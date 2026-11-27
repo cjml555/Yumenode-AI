@@ -33,7 +33,7 @@ class BenchmarkController(private val host: BenchmarkHost) {
                 onUpdate(host.getString(R.string.s_487, i, runs))
                 val t0 = SystemClock.uptimeMillis()
                 val out = try {
-                    ChatCore.generate(listOf(ChatCore.Msg("user", prompt)), 0.7f, 128) { }
+                    ChatCore.generate(listOf(ChatCore.Msg("user", prompt)), 0.7f, 128, onDelta = { })
                 } catch (e: Throwable) {
                     onUpdate("Error: ${e.message ?: e.javaClass.simpleName}")
                     return@launch

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Tool calling en la API OpenAI-compatible** (`tools`, `tool_choice`): el modelo local no
+  habla el protocolo de herramientas de ningún proveedor, así que la app describe cada
+  herramienta en un mensaje de sistema y fuerza una respuesta JSON válida con
+  `withJsonSchema` (decodificación restringida de llama.cpp); después traduce ese JSON a
+  `tool_calls` con `finish_reason: "tool_calls"`. Soporta `tool_choice: "none"`, herramienta
+  forzada, historial con rol `tool` y streaming (la llamada llega en un chunk con los
+  argumentos completos). Solo backend GGUF; con LiteRT se ignora `tools`.
+  Verificado en el Edge 50 Fusion con Qwen2.5-0.5B-Q4_K_M:
+  `get_weather{"city":"Toluca"}` → `tool_calls`, y el turno de vuelta con el resultado
+  responde en texto con `finish_reason: "stop"`.
+
 ## [1.4.6] - 2026-11-26
 
 ### Fixed
