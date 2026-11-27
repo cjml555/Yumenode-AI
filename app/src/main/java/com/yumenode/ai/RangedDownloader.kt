@@ -41,6 +41,14 @@ class RangedDownloader(
      * probar la division con ficheros pequenos.
      */
     private val minSegmentBytes: Long = RangePlan.MIN_SEGMENT_BYTES,
+    /** Conexiones simultaneas (trozos en vuelo a la vez). */
+    private val MAX_PARALLEL: Int = RangePlan.MAX_SEGMENTS,
+    /**
+     * Se invoca al arrancar cada hilo de descarga. El llamador lo usa para bajar
+     * la prioridad del hilo: sin esto, cuatro hilos escribiendo a tope compiten
+     * con el hilo principal y la UI se queda sin CPU (ANR por Input dispatching).
+     */
+    private val onThreadStart: (() -> Unit)? = null,
 ) {
 
     companion object {
@@ -95,10 +103,14 @@ class RangedDownloader(
             return downloadSingleStream(url, destFile, total, onProgress, isCancelled)
         }
 
-        // 2) Repartir en tramos y ver cuales ya estaban hechos (reanudacion).
-        val count = RangePlan.segmentCount(total, minSegmentBytes = minSegmentBytes)
+        // 2) Repartir en trozos finos y ver cuales ya estaban hechos (reanudacion).
+        //    El troceado es independiente del paralelismo: los hilos van
+        //    tomando trozos de una cola, asi el `.parts` avanza cada 16 MB y
+        //    cerrar la app pierde como mucho un trozo por hilo.
+        val chunkBytes = RangePlan.CHECKPOINT_CHUNK_BYTES
+        val count = RangePlan.chunkCount(total, chunkBytes)
         val segments = RangePlan.segments(total, count)
-        val done = readCompletedParts(partsFile)
+        val done = readCompletedParts(partsFile, chunkBytes)
         val pending = RangePlan.pending(segments, done)
         if (pending.isEmpty()) {
             onProgress(total, total)
@@ -112,14 +124,22 @@ class RangedDownloader(
             raf.setLength(total)
             val channel = raf.channel
 
-            val workers = pending.map { seg ->
+            // Cola de trozos + un hilo por conexion simultanea: se reaprovecha
+            // el ancho de banda sin hacer tramos gigantes.
+            val queue = java.util.concurrent.ConcurrentLinkedQueue(pending)
+            val threads = minOf(MAX_PARALLEL, pending.size).coerceAtLeast(1)
+            val workers = (0 until threads).map {
                 Thread {
-                    try {
-                        val got = fetchSegment(url, seg, channel, downloaded, total, onProgress, isCancelled)
-                        if (got > 0) markPartDone(partsFile, seg.index)
-                    } catch (_: Exception) {
-                        // Un tramo fallido se reintentara en la siguiente
-                        // invocacion (queda sin marcar en el .parts).
+                    runCatching { onThreadStart?.invoke() }
+                    while (!isCancelled()) {
+                        val seg = queue.poll() ?: break
+                        try {
+                            val got = fetchSegment(url, seg, channel, downloaded, total, onProgress, isCancelled)
+                            if (got > 0) markPartDone(partsFile, seg.index, chunkBytes)
+                        } catch (_: Exception) {
+                            // Un trozo fallido se reintentara en la siguiente
+                            // invocacion (queda sin marcar en el .parts).
+                        }
                     }
                 }
             }
@@ -132,7 +152,7 @@ class RangedDownloader(
         }
 
         // 4) ¿Se descargaron todos los bytes? Si no, algo fallo.
-        val stillPending = RangePlan.pending(segments, readCompletedParts(partsFile))
+        val stillPending = RangePlan.pending(segments, readCompletedParts(partsFile, chunkBytes))
         if (stillPending.isNotEmpty()) {
             return Result(
                 false,
@@ -351,23 +371,26 @@ class RangedDownloader(
     }
 
     /** Tramos ya completados, leidos del fichero `.parts`. */
-    private fun readCompletedParts(partsFile: File): Set<Int> {
+    private fun readCompletedParts(partsFile: File, chunkBytes: Long): Set<Int> {
         if (!partsFile.exists()) return emptySet()
         return try {
-            partsFile.readLines()
-                .mapNotNull { it.trim().toIntOrNull() }
-                .toSet()
+            val lines = partsFile.readLines()
+            // Un `.parts` de otro troceado no sirve: los indices apuntan a
+            // offsets distintos y se corromperia el fichero.
+            if (lines.firstOrNull()?.trim() != RangePlan.partsHeader(chunkBytes)) return emptySet()
+            lines.drop(1).mapNotNull { it.trim().toIntOrNull() }.toSet()
         } catch (_: Exception) {
             emptySet()
         }
     }
 
     /** Marca un tramo como completado (para poder reanudar). */
-    private fun markPartDone(partsFile: File, index: Int) {
+    private fun markPartDone(partsFile: File, index: Int, chunkBytes: Long) {
         try {
             synchronized(partsFile) {
-                val current = readCompletedParts(partsFile)
+                val current = readCompletedParts(partsFile, chunkBytes)
                 if (index in current) return
+                if (!partsFile.exists()) partsFile.appendText(RangePlan.partsHeader(chunkBytes) + "\n")
                 partsFile.appendText("$index\n")
             }
         } catch (_: Exception) {

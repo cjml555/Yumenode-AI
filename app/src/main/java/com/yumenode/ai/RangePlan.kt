@@ -50,6 +50,28 @@ object RangePlan {
     }
 
     /**
+     * Tamano de trozo con el que se *guarda avance*, independiente del
+     * paralelismo.
+     *
+     * Con tramos gigantes (unos pocos) el fichero `.parts` solo se escribe al
+     * terminar cada uno: en un modelo de 4 GB eso son cientos de MB de trabajo
+     * que se pierden al cerrar la app. Troceando fino se pierde como mucho un
+     * trozo por hilo.
+     */
+    const val CHECKPOINT_CHUNK_BYTES = 16L * 1024 * 1024
+
+    /** Cabecera que se escribe en `.parts` para saber a que troceado pertenece. */
+    fun partsHeader(chunkBytes: Long = CHECKPOINT_CHUNK_BYTES): String = "#chunk=$chunkBytes"
+
+    /** Cuantos trozos de [chunkBytes] caben en `totalBytes` (minimo 1). */
+    fun chunkCount(totalBytes: Long, chunkBytes: Long = CHECKPOINT_CHUNK_BYTES): Int {
+        if (totalBytes <= 0L) return 1
+        val size = chunkBytes.coerceAtLeast(1L)
+        val n = (totalBytes + size - 1) / size
+        return n.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
+    }
+
+    /**
      * Parte `[0, totalBytes)` en `count` tramos contiguos.
      *
      * Los tramos se reparten de forma uniforme: el primero se queda con el

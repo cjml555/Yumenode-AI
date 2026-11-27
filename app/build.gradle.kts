@@ -161,6 +161,9 @@ dependencies {
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
     implementation("androidx.viewpager:viewpager:1.1.0")
+    // Descargas de modelos en segundo plano: WorkManager relanza el trabajo si
+    // Android mata el proceso y el downloader reanuda desde el `.parts`.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     // 打标（Tagger）：ONNX Runtime，运行用户导入的 WD14 类 .onnx 模型（arm64-v8a）
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // PDF 文本抽取（对话发送 PDF）：Tom Roush 的 PDFBox Android 移植

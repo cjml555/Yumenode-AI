@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Descargas de modelos que sobreviven a cerrar la app** (WorkManager):
+  - El trabajo se encola con nombre único por modelo y se reanuda desde el `.parts`
+    en vez de empezar de cero.
+  - Las descargas pendientes se apuntan en preferencias y se reencolan al abrir la app,
+    porque WorkManager puede tardar minutos en reprogramarlas por su cuenta.
+  - Backoff lineal de 10 s (el exponencial por defecto dejaba un modelo de 4 GB parado
+    varios minutos tras unos cortes) y reintentos sin tope cuando falla la red.
+  - Si Android no permite el servicio en primer plano (reanudación en segundo plano,
+    Android 12+), se sigue descargando sin morir.
+
+### Fixed
+- **ANR al cambiar de pestaña**: la auto-inicialización de WorkManager abría su base de
+  datos en el hilo principal al arrancar y la app dejaba de responder >10 s. Ahora se
+  inicializa bajo demanda (`YumenodeApp : Configuration.Provider`). Verificado en
+  dispositivo: 0 ANR con descarga activa y cambios de pestaña.
+- **Reanudación gruesa**: los tramos eran tan grandes (4 trozos de ~427 MB en un modelo
+  de 1,7 GB) que el `.parts` casi nunca se escribía y un corte perdía todo el avance.
+  Ahora el troceado es de 16 MB y es independiente del paralelismo, así que se pierde
+  como mucho un trozo por conexión. Medido: 73 → 123 → 185 MB tras cerrar la app.
+- Los hilos de descarga van en prioridad de fondo y el progreso se publica como mucho
+  cada 1 % / 400 ms, para no competir con la UI ni machacar la base de datos del planificador.
+- Regla de ProGuard para que R8 no renombre el `Worker` (se instancia por reflexión):
+  verificado que `ModelDownloadWorker` sigue con su nombre en el dex de release.
+
 ## [1.4.13] - 2026-11-27
 
 ### Added

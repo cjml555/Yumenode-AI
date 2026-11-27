@@ -22,7 +22,8 @@ import android.os.Build
 object DownloadNotifier {
 
     private const val CHANNEL_ID = "ponko_downloads"
-    private const val NOTIF_ID = 4201
+    /** Id fijo: lo comparte la notificación normal y el foreground service del worker. */
+    const val NOTIF_ID = 4201
 
     private fun nm(ctx: Context): NotificationManager =
         ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -54,6 +55,21 @@ object DownloadNotifier {
             .setContentTitle(title)
             .setContentIntent(open)
             .setOnlyAlertOnce(true)
+    }
+
+    /**
+     * La misma notificación de progreso, pero devuelta en vez de publicada:
+     * la necesita `ForegroundInfo` del worker de WorkManager.
+     */
+    fun ongoing(ctx: Context, modelName: String, pct: Int, detail: String): Notification {
+        ensureChannel(ctx)
+        val p = pct.coerceIn(0, 100)
+        return builder(ctx, "Descargando $modelName")
+            .setContentText(detail)
+            .setSubText("$p%")
+            .setProgress(100, p, false)
+            .setOngoing(true)
+            .build()
     }
 
     /** Barra de progreso determinada (0..100). */
