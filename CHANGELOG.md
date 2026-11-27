@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.13] - 2026-11-27
+
 ### Added
 - `tools/api-smoke.sh`: smoke test de la API contra el dispositivo (12 comprobaciones:
   health, modelos, chat, stream, usage, tools, response_format, determinismo con seed,
