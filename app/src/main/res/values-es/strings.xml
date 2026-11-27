@@ -625,4 +625,13 @@
     <string name="s_emb_toggle">Modo embeddings (para /v1/embeddings)</string>
     <string name="s_emb_hint">Carga el GGUF sin KV cache para poder calcular vectores; el chat irá más lento. Surte efecto al recargar el modelo.</string>
     <string name="s_emb_need_reload">Modo embeddings cambiado: recarga el modelo para aplicarlo.</string>
+    <string name="s_search_chats">Buscar en el historial…</string>
+    <string name="s_no_results">Sin resultados</string>
+    <string name="s_a11y_menu">Abrir lista de chats</string>
+    <string name="s_a11y_new_chat">Nuevo chat</string>
+    <string name="s_a11y_send">Enviar mensaje</string>
+    <string name="s_a11y_stop">Detener la generación</string>
+    <string name="s_a11y_delete">Borrar chat</string>
+    <string name="s_a11y_results">%1$d resultados</string>
+    <string name="s_a11y_results_one">1 resultado</string>
 </resources>

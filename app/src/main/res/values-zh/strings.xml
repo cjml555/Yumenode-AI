@@ -516,4 +516,13 @@
     <string name="s_emb_toggle">嵌入模式（用于 /v1/embeddings）</string>
     <string name="s_emb_hint">加载 GGUF 时不使用 KV 缓存以计算向量；对话会变慢。重新加载模型后生效。</string>
     <string name="s_emb_need_reload">嵌入模式已更改：重新加载模型以生效。</string>
+    <string name="s_search_chats">搜索历史…</string>
+    <string name="s_no_results">没有结果</string>
+    <string name="s_a11y_menu">打开对话列表</string>
+    <string name="s_a11y_new_chat">新对话</string>
+    <string name="s_a11y_send">发送消息</string>
+    <string name="s_a11y_stop">停止生成</string>
+    <string name="s_a11y_delete">删除对话</string>
+    <string name="s_a11y_results">%1$d 个结果</string>
+    <string name="s_a11y_results_one">1 个结果</string>
 </resources>

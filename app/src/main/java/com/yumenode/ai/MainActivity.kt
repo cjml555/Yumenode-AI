@@ -972,7 +972,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        appBarMenu = ui.iconButton("☰") { openDrawer() }
+        appBarMenu = ui.iconButton("☰") { openDrawer() }.apply {
+            contentDescription = getString(R.string.s_a11y_menu)
+        }
         r1.addView(appBarMenu, wrapWrap())
 
         // Ícono de la app en el header, justo al lado del nombre
@@ -1022,7 +1024,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             }
             r1.addView(badge, wrapWrap().apply { leftMargin = dp(6) })
         }
-        appBarPlus = ui.iconButton("＋") { newSession() }
+        appBarPlus = ui.iconButton("＋") { newSession() }.apply {
+            contentDescription = getString(R.string.s_a11y_new_chat)
+        }
         r1.addView(appBarPlus, wrapWrap())
         if (FeatureToggleManager.isPremium) {
             val premiumBtn = ui.iconButton("★") { toast("Premium unlocked") }
@@ -1282,6 +1286,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
                 isClickable = true
                 setPadding(0, dp(7), 0, dp(7))
                 setOnClickListener { switchTab(idx) }
+                contentDescription = label
             }
             val iconTv = TextView(this).apply { text = icon; textSize = 17f; gravity = Gravity.CENTER }
             val labelTv = TextView(this).apply {
@@ -1327,6 +1332,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     // ---- Left chat drawer ----
 
+    /** Filtro del historial de chats (se aplica al dibujar la lista). */
+    private var drawerQuery: String = ""
+    /** Contenedor solo de la lista (el buscador no se reconstruye al filtrar). */
+    private lateinit var drawerList: LinearLayout
+
     override fun buildDrawer(rootFrame: FrameLayout) {
         drawerMask = View(this).apply {
             setBackgroundColor(C_SCRIM)
@@ -1351,6 +1361,29 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             setBackgroundColor(C_PRIMARY)
             setPadding(dp(16), dp(18), dp(16), dp(18))
         }, matchWrap())
+
+        // Buscador del historial: filtra por título y por texto de los turnos.
+        val search = EditText(this).apply {
+            hint = getString(R.string.s_search_chats)
+            textSize = 13f
+            setSingleLine(true)
+            setTextColor(C_TEXT)
+            setHintTextColor(C_SUBTEXT)
+            contentDescription = getString(R.string.s_search_chats)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(editable: android.text.Editable?) {
+                    val q = editable?.toString().orEmpty()
+                    if (q != drawerQuery) {
+                        drawerQuery = q
+                        renderDrawerList()
+                    }
+                }
+                override fun beforeTextChanged(ch: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(ch: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+        }
+        drawerPanel.addView(search, matchWrap())
 
         val sv = ScrollView(this)
         drawerBody = LinearLayout(this).apply {
@@ -1378,25 +1411,67 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     override fun refreshDrawer() {
+        val search = drawerPanel.getChildAt(1) as? EditText
+        if (search != null && search.text?.toString().orEmpty() != drawerQuery) {
+            search.setText(drawerQuery)
+        }
+        renderDrawerList()
+    }
+
+    /**
+     * Pinta la lista de chats aplicando [drawerQuery].
+     *
+     * Coincide por título y por el texto de cualquier turno (pregunta o
+     * respuesta); en ese caso se muestra un fragmento del turno encontrado.
+     */
+    private fun renderDrawerList() {
         drawerBody.removeAllViews()
         drawerBody.addView(ui.actionButton(getString(R.string.s_201)) { closeDrawer(); newSession() },
             matchWrap().apply { setMargins(dp(12), dp(4), dp(12), dp(10)) })
 
-        for (s in sessions.sortedByDescending { it.id }) {
+        val q = drawerQuery.trim()
+        val matches = ChatSearch.filter(sessions.sortedByDescending { it.id }, q)
+
+        if (q.isNotEmpty()) {
+            val countText = if (matches.size == 1) getString(R.string.s_a11y_results_one)
+            else getString(R.string.s_a11y_results, matches.size)
+            drawerBody.addView(ui.hintText(countText),
+                matchWrap().apply { setMargins(dp(16), 0, dp(16), dp(6)) })
+        }
+        if (matches.isEmpty()) {
+            drawerBody.addView(ui.hintText(getString(R.string.s_no_results)),
+                matchWrap().apply { setMargins(dp(16), dp(8), dp(16), dp(8)) })
+            return
+        }
+
+        for (m in matches) {
+            val s = m.session
+            val snippet = m.snippet
             val isCur = s === current
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(16), dp(12), dp(8), dp(12))
                 isClickable = true
+                contentDescription = s.title
                 if (isCur) setBackgroundColor(C_PRIMARY_SOFT)
             }
-            row.addView(TextView(this).apply {
+            val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(TextView(this).apply {
                 text = s.title
                 textSize = 14f
                 setTextColor(if (isCur) C_PRIMARY else C_TEXT)
                 maxLines = 1
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }, matchWrap())
+            if (snippet != null) {
+                texts.addView(TextView(this).apply {
+                    text = snippet
+                    textSize = 11f
+                    maxLines = 2
+                    setTextColor(C_SUBTEXT)
+                }, matchWrap())
+            }
+            row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(TextView(this).apply {
                 text = getString(R.string.v_001, (s.turns.size))
                 textSize = 11f
@@ -1408,6 +1483,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
                 textSize = 14f
                 setPadding(dp(8), dp(2), dp(8), dp(2))
                 isClickable = true
+                contentDescription = getString(R.string.s_a11y_delete)
                 setOnClickListener { confirmDeleteSession(s) }
             }, wrapWrap())
             row.setOnClickListener { closeDrawer(); switchTo(s) }
