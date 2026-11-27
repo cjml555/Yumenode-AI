@@ -892,6 +892,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
      */
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
+        // Primero asegurar que la pestaña Chat está montada: switchTab puede
+        // reconstruir la barra de entrada y se perdería el texto compartido.
+        switchTab(0)
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)
         val stream: Uri? = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -913,11 +916,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
                 toast(getString(R.string.s_share_image))
             }
         } else if (!text.isNullOrBlank()) {
-            val current = inputEdit.text?.toString().orEmpty()
-            inputEdit.setText(if (current.isBlank()) text else "$current\n$text")
-            toast(getString(R.string.s_share_text))
+            val apply = {
+                val current = inputEdit.text?.toString().orEmpty()
+                inputEdit.setText(if (current.isBlank()) text else "$current\n$text")
+                toast(getString(R.string.s_share_text))
+            }
+            if (inputEdit.post(apply)) Unit else apply()
         }
-        switchTab(0)
     }
 
     /** Chat page: message list + jump-to-bottom button + smart auto-follow scroll. */
