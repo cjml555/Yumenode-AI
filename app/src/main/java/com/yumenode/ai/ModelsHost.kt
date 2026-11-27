@@ -128,6 +128,12 @@ interface ModelsHost {
     /** Callback: actualizar uso de GPU en la página de dibujo. */
     fun onSetDrawUseGpu(value: Boolean)
 
+    /** ¿El GGUF se carga en modo embeddings (sin KV cache)? */
+    val chatEmbeddings: Boolean
+
+    /** Activa/desactiva el modo embeddings (surte efecto al recargar el modelo). */
+    fun onSetChatEmbeddings(value: Boolean)
+
     /** Callback: seleccionar archivo mmproj. */
     fun onPickMmprojFile()
 

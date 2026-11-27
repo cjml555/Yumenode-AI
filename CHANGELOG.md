@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **API OpenAI más completa** (probada contra el teléfono con `curl`):
+  - `GET /v1/models/{id}` — el modelo cargado, o 404.
+  - `POST /v1/completions` — formato legacy `text_completion` (stream y no-stream).
+  - `POST /v1/embeddings` — usa `LlamaModel.embed()`; requiere cargar el GGUF en
+    **Modo embeddings** (nuevo checkbox en Modelos/API), porque llama.cpp desactiva el KV
+    cache y exige pooling `MEAN` en ese modo. Devuelve vectores reales (896 dims con
+    Qwen2.5-0.5B) y 409 con instrucciones si el modelo se cargó sin ese modo.
+  - `response_format` (`json_object` y `json_schema`): el binding **no aplica**
+    `withJsonSchema` ni `withGrammar` en `generateChat` (verificado: un schema inválido se
+    ignoraba), así que el modo estricto se refuerza con una instrucción de sistema y la
+    respuesta se limpia de vallas de código antes de devolverla.
+  - `tool_choice: "required"` — si el modelo contesta texto, se reintenta una vez forzando
+    la primera herramienta.
+  - `429` ahora incluye `Retry-After: 1`.
+
+### Fixed
+- El modo embeddings no aplicaba pooling y `/v1/embeddings` fallaba con
+  «Pooling type 'none' is not OAI compatible».
+
 ### Changed
 - **`tools/build-llama-vulkan.sh` reproducible otra vez**: empaqueta el AAR partiendo del
   **AAR oficial de la misma versión** (antes usaba una plantilla 5.1.0 del historial, que es

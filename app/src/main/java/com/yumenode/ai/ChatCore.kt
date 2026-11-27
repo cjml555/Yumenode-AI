@@ -158,6 +158,26 @@ object ChatCore {
     /** true si el backend cargado admite decodificación restringida (GGUF). */
     fun supportsJsonSchema(): Boolean = llama != null
 
+    /**
+     * Embeddings de una lista de textos (solo GGUF: el bind de llama.cpp expone
+     * `LlamaModel.embed(Collection<String>)`).
+     *
+     * Lanza IllegalStateException si no hay modelo o si es LiteRT-LM.
+     */
+    suspend fun embedding(inputs: List<String>): List<FloatArray> = lock.withLock {
+        val lm = llama ?: throw IllegalStateException(
+            if (engine != null) "El modelo LiteRT-LM no expone embeddings; carga un .gguf"
+            else "No hay modelo de chat cargado"
+        )
+        busy = true
+        cancelFlag = false
+        try {
+            withContext(Dispatchers.IO) { lm.embed(inputs) }
+        } finally {
+            busy = false
+        }
+    }
+
     // ==================== LiteRT-LM path ====================
 
     private suspend fun runLiteRt(
@@ -247,6 +267,10 @@ object ChatCore {
 
         // Decodificación restringida: la gramática derivada del JSON Schema hace
         // que el modelo solo pueda emitir un objeto válido (tool calling).
+        // Decodificación restringida: se pasa el schema por si el binding lo
+        // honra; hoy `generateChat` lo ignora (verificado con un schema
+        // inválido, que se aceptó igual), así que el modo estricto se refuerza
+        // con la instrucción de sistema que añade ApiServer.
         if (!jsonSchema.isNullOrBlank()) {
             runCatching { params.withJsonSchema(jsonSchema) }
         }

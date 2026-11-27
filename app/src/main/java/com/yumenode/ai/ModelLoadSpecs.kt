@@ -5,6 +5,7 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EngineConfig
 import net.ladenthin.llama.args.CacheType
 import net.ladenthin.llama.args.FlashAttn
+import net.ladenthin.llama.args.PoolingType
 import net.ladenthin.llama.parameters.ModelParameters
 import java.io.File
 
@@ -37,6 +38,7 @@ internal object ModelLoadSpecs {
         gpuLayers: Int = 0,
         cacheTypeK: CacheType = CacheType.Q8_0,
         cacheTypeV: CacheType = CacheType.Q8_0,
+        embeddings: Boolean = false,
     ): ModelParameters {
         val params = ModelParameters()
             .setModel(path)
@@ -58,6 +60,14 @@ internal object ModelLoadSpecs {
             // quepa en un movil.
             .setCacheTypeK(cacheTypeK)
             .setCacheTypeV(cacheTypeV)
+        // Embeddings: llama.cpp desactiva la atención causal y el KV cache en
+        // este modo, por eso es opt-in (solo si vas a usar /v1/embeddings).
+        if (embeddings) {
+            // llama.cpp exige un pooling OAI-compatible: con NONE (el default)
+            // /v1/embeddings falla con "Pooling type 'none' is not OAI compatible".
+            params.enableEmbedding()
+            params.setPoolingType(PoolingType.MEAN)
+        }
         // Multimodal: sin el proyector de visión el gguf no acepta imágenes.
         mmprojPath?.let { if (File(it).isFile) params.setMmproj(it) }
         return params

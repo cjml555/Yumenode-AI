@@ -61,6 +61,39 @@ object ToolCalling {
         return out
     }
 
+    /**
+     * Instrucción de sistema para `response_format`: el modelo debe responder
+     * solo un JSON válido que cumpla el schema (mismo enfoque que las tools,
+     * porque el binding no aplica gramáticas en `generateChat`).
+     */
+    fun jsonInstructions(schema: String): String =
+        "Responde EXCLUSIVAMENTE con un objeto JSON válido que cumpla este JSON Schema, " +
+            "sin texto antes ni después, sin vallas de código:\n" + schema
+
+    /** `tool_choice: "required"`: el cliente exige que se llame a alguna herramienta. */
+    fun toolChoiceRequired(req: JSONObject): Boolean =
+        (req.opt("tool_choice") as? String)?.equals("required", ignoreCase = true) == true
+
+    /**
+     * Schema de `response_format` (OpenAI).
+     *
+     * - `{"type":"json_object"}` → cualquier objeto JSON
+     * - `{"type":"json_schema","json_schema":{"schema":{...}}}` → ese schema
+     * - `text` o ausente → null (sin restricción)
+     */
+    fun responseFormatSchema(req: JSONObject): String? {
+        val rf = req.optJSONObject("response_format") ?: return null
+        return when (rf.optString("type").lowercase()) {
+            "json_object" -> "{\"type\":\"object\"}"
+            "json_schema" -> when (val inner = rf.optJSONObject("json_schema")?.opt("schema")) {
+                is JSONObject -> inner.toString()
+                is String -> inner.ifBlank { null }
+                else -> null
+            }
+            else -> null
+        }
+    }
+
     /** `tool_choice`: "none" desactiva el modo herramientas. */
     fun toolsAllowed(req: JSONObject): Boolean {
         val choice = req.opt("tool_choice")
@@ -153,6 +186,16 @@ object ToolCalling {
         }
         val answer = obj.optString("answer")
         return Result(null, answer.ifBlank { text.trim() })
+    }
+
+    /**
+     * `response_format`: deja solo el JSON, aunque el modelo lo envuelva en
+     * vallas de código o añada texto alrededor (los modelos pequeños lo hacen).
+     * Si no hay JSON válido, devuelve el texto tal cual.
+     */
+    fun normalizeJsonOutput(text: String): String {
+        val json = extractJsonObject(text) ?: return text.trim()
+        return if (runCatching { JSONObject(json) }.isSuccess) json else text.trim()
     }
 
     /** Primer objeto JSON balanceado del texto (respeta cadenas y escapes). */

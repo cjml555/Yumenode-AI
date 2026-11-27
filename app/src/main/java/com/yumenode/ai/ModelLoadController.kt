@@ -126,6 +126,7 @@ class ModelLoadController(private val host: ModelLoadHost) : ThemeAliases {
             gpuLayers = gpuLayers,
             cacheTypeK = KvCacheConfig.type(host.activity),
             cacheTypeV = KvCacheConfig.type(host.activity),
+            embeddings = host.prefBool(KEY_CHAT_EMBEDDINGS, false),
         )
         val m = LlamaModel(params)
         val vok = try { m.supportsVision() } catch (_: Throwable) { false }

@@ -1217,6 +1217,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             override fun onLoadChatParamsIntoUi() = this@MainActivity.loadChatParamsIntoUiInternal()
             override fun onBuildApiBlock(role: ApiServer.Role, extraAfterAddress: List<View>, extraNotes: List<View>): ApiBlockView = this@MainActivity.buildApiBlock(role, extraAfterAddress, extraNotes)
             override fun onSetDrawUseGpu(value: Boolean) { this@MainActivity.drawPageInternal?.useGpu = value }
+            override val chatEmbeddings: Boolean
+                get() = this@MainActivity.prefBool(KEY_CHAT_EMBEDDINGS, false)
+            override fun onSetChatEmbeddings(value: Boolean) {
+                this@MainActivity.prefPutBool(KEY_CHAT_EMBEDDINGS, value)
+                this@MainActivity.toast(getString(R.string.s_emb_need_reload))
+            }
             override fun onPickMmprojFile() { this@MainActivity.visionManager?.pickMmprojFile() }
             override fun onRefreshMmprojUi() { this@MainActivity.visionManager?.refreshMmprojUi() }
             override fun onProgress(pct: Int?) {

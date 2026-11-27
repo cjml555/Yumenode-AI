@@ -148,6 +148,15 @@ class ApiServer(
             method == "POST" && path == "/v1/images/generations" ->
                 if (role == Role.DRAW) imagesGenerations(s, body) else wrongRole(s, "/v1/images/generations", "draw")
 
+            method == "POST" && path == "/v1/completions" ->
+                if (role == Role.CHAT) completions(s, body) else wrongRole(s, "/v1/completions", "chat")
+
+            method == "POST" && path == "/v1/embeddings" ->
+                if (role == Role.CHAT) embeddings(s, body) else wrongRole(s, "/v1/embeddings", "chat")
+
+            method == "GET" && path.startsWith("/v1/models/") ->
+                modelById(s, path.removePrefix("/v1/models/"))
+
             else -> respondJson(s, 404, OpenAiApi.error("Not found: $method $path", OpenAiApi.ErrorType.INVALID_REQUEST))
         }
     }
@@ -234,7 +243,7 @@ class ApiServer(
             return
         }
         if (DrawCore.busy || DrawCore.uiBusy) {
-            respondJson(s, 429, OpenAiApi.error("The drawing engine is busy with another request. Retry shortly.", OpenAiApi.ErrorType.RATE_LIMIT))
+            busy(s, "The drawing engine is busy with another request. Retry shortly.")
             return
         }
         val fmt = req.optString("response_format", "b64_json").lowercase()
@@ -327,6 +336,172 @@ class ApiServer(
 
     // ==================== /v1/chat/completions ====================
 
+    // ==================== /v1/models/{id}, /v1/completions, /v1/embeddings ====================
+
+    /** `GET /v1/models/{id}`: el modelo cargado, o 404. */
+    private fun modelById(s: Socket, id: String) {
+        val model = ChatCore.modelName
+        if (model == null) {
+            respondJson(s, 503, OpenAiApi.error(
+                "No chat model loaded in Yumenode AI.", OpenAiApi.ErrorType.SERVICE_UNAVAILABLE))
+            return
+        }
+        if (!id.equals(model, ignoreCase = true) && !id.equals("ponko", ignoreCase = true)) {
+            respondJson(s, 404, OpenAiApi.error("Model not found: $id", OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        respondJson(s, 200, OpenAiApi.model(model, "ponko", System.currentTimeMillis() / 1000))
+    }
+
+    /**
+     * `POST /v1/completions` (legacy): `prompt` se envía como un mensaje de
+     * usuario y se devuelve en formato `text_completion`. Acepta `prompt` como
+     * string o como array de strings (se unen con saltos de línea).
+     */
+    private fun completions(s: Socket, body: ByteArray) {
+        val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
+        if (req == null) {
+            respondJson(s, 400, OpenAiApi.error("Invalid JSON body", OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        val prompt = when (val p = req.opt("prompt")) {
+            is String -> p
+            is JSONArray -> (0 until p.length()).joinToString("\n") { p.optString(it) }
+            else -> {
+                respondJson(s, 400, OpenAiApi.error(
+                    "prompt is required (string or array of strings)", OpenAiApi.ErrorType.INVALID_REQUEST))
+                return
+            }
+        }
+        if (prompt.isBlank()) {
+            respondJson(s, 400, OpenAiApi.error("prompt must not be empty", OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        if (!ChatCore.isReady()) {
+            respondJson(s, 503, OpenAiApi.error(
+                "No chat model loaded in Yumenode AI. Open the app and load a model first.",
+                OpenAiApi.ErrorType.SERVICE_UNAVAILABLE))
+            return
+        }
+        if (ChatCore.busy) {
+            busy(s, "The model is busy with another request. Retry shortly.")
+            return
+        }
+        val stream = req.optBoolean("stream", false)
+        val sampling = OpenAiApi.parseSampling(req)
+        val model = ChatCore.modelName ?: "ponko"
+        val id = "cmpl-" + System.nanoTime().toString(36)
+        val created = System.currentTimeMillis() / 1000
+        served++
+        lastRequest = "#$served ${if (stream) "stream" else "once"} · completions · ${prompt.take(40)}"
+        val messages = listOf(ChatCore.Msg("user", prompt))
+        val schema = if (ChatCore.supportsJsonSchema()) ToolCalling.responseFormatSchema(req) else null
+
+        if (!stream) {
+            val answer = runCatching {
+                runBlocking { ChatCore.generate(messages, sampling.temperature, sampling.maxTokens, onDelta = {}, jsonSchema = schema) }
+            }.getOrElse { e ->
+                respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
+                return
+            }
+            val usage = JSONObject()
+                .put("prompt_tokens", estimateTokens(prompt.length))
+                .put("completion_tokens", estimateTokens(answer.length))
+                .put("total_tokens", estimateTokens(prompt.length + answer.length))
+            respondJson(s, 200, OpenAiApi.textCompletion(id, model, created, answer, usage))
+            return
+        }
+        val out = s.getOutputStream()
+        writeHead(out, 200, "text/event-stream")
+        var broke = false
+        fun event(obj: JSONObject) {
+            if (broke) return
+            try { writeChunk(out, OpenAiApi.sseEvent(obj)) } catch (_: Throwable) {
+                broke = true
+                ChatCore.requestCancel()
+            }
+        }
+        try {
+            runBlocking {
+                ChatCore.generate(messages, sampling.temperature, sampling.maxTokens, onDelta = { piece ->
+                    event(OpenAiApi.textCompletionChunk(id, model, created, piece))
+                }, jsonSchema = schema)
+            }
+            if (!broke) {
+                event(OpenAiApi.textCompletionChunk(id, model, created, "").apply {
+                    getJSONArray("choices").getJSONObject(0).put("finish_reason", "stop")
+                })
+                writeChunk(out, OpenAiApi.SSE_DONE)
+            }
+        } catch (e: Throwable) {
+            if (!broke) event(OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
+        } finally {
+            runCatching { out.write("0\r\n\r\n".toByteArray()); out.flush() }
+        }
+    }
+
+    /**
+     * `POST /v1/embeddings`: usa `LlamaModel.embed()` del bind de llama.cpp.
+     * Solo GGUF; con LiteRT-LM se responde 501 (esa API no expone vectores).
+     */
+    private fun embeddings(s: Socket, body: ByteArray) {
+        val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
+        if (req == null) {
+            respondJson(s, 400, OpenAiApi.error("Invalid JSON body", OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        val texts: List<String> = when (val input = req.opt("input")) {
+            is String -> listOf(input)
+            is JSONArray -> (0 until input.length()).map { input.optString(it) }
+            else -> {
+                respondJson(s, 400, OpenAiApi.error(
+                    "input is required (string or array of strings)", OpenAiApi.ErrorType.INVALID_REQUEST))
+                return
+            }
+        }
+        if (texts.isEmpty() || texts.any { it.isBlank() }) {
+            respondJson(s, 400, OpenAiApi.error("input must contain non-empty strings", OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        if (!ChatCore.isReady()) {
+            respondJson(s, 503, OpenAiApi.error(
+                "No chat model loaded in Yumenode AI. Open the app and load a model first.",
+                OpenAiApi.ErrorType.SERVICE_UNAVAILABLE))
+            return
+        }
+        if (!ChatCore.supportsJsonSchema()) {
+            respondJson(s, 501, OpenAiApi.error(
+                "Embeddings need a .gguf model: the LiteRT-LM engine does not expose vectors.",
+                OpenAiApi.ErrorType.INVALID_REQUEST))
+            return
+        }
+        if (ChatCore.busy) {
+            busy(s, "The model is busy with another request. Retry shortly.")
+            return
+        }
+        served++
+        lastRequest = "#$served embeddings · ${texts.size} input(s)"
+        val vectors = runCatching {
+            runBlocking { ChatCore.embedding(texts) }
+        }.getOrElse { e ->
+            val msg = e.message ?: e.javaClass.simpleName
+            // El modelo se cargó sin setEmbedding(true): es configuracion, no fallo del server.
+            if (msg.contains("embedding support", ignoreCase = true)) {
+                respondJson(s, 409, OpenAiApi.error(
+                    "Model loaded without embedding support: enable «Embeddings mode» in Models/API and reload the model.",
+                    OpenAiApi.ErrorType.INVALID_REQUEST))
+            } else {
+                respondJson(s, 500, OpenAiApi.error(msg, OpenAiApi.ErrorType.SERVER))
+            }
+            return
+        }
+        val chars = texts.sumOf { it.length }
+        val usage = JSONObject()
+            .put("prompt_tokens", estimateTokens(chars))
+            .put("total_tokens", estimateTokens(chars))
+        respondJson(s, 200, OpenAiApi.embeddings(ChatCore.modelName ?: "ponko", vectors, usage))
+    }
+
     private fun chatCompletions(s: Socket, body: ByteArray) {
         val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
         if (req == null) {
@@ -346,9 +521,7 @@ class ApiServer(
             return
         }
         if (ChatCore.busy) {
-            respondJson(s, 429, OpenAiApi.error(
-                "The model is busy with another request. Retry shortly.",
-                OpenAiApi.ErrorType.RATE_LIMIT))
+            busy(s, "The model is busy with another request. Retry shortly.")
             return
         }
 
@@ -373,10 +546,21 @@ class ApiServer(
         // Si el último mensaje es el resultado de una herramienta, se le pide al
         // modelo que responda con esa información en vez de volver a llamarla.
         val afterToolResult = messages.lastOrNull()?.role == "tool"
-        val effectiveMessages = if (tools.isEmpty()) messages else
-            ToolCalling.normalize(messages) +
+        val toolSchema = if (tools.isEmpty()) null else ToolCalling.responseSchema(tools, forcedTool)
+        // response_format solo aplica cuando no hay tools (si hay, manda el schema de tools)
+        val formatSchema = if (tools.isEmpty() && ChatCore.supportsJsonSchema()) {
+            ToolCalling.responseFormatSchema(req)
+        } else null
+        val schema = toolSchema ?: formatSchema
+        val effectiveMessages = when {
+            tools.isNotEmpty() -> ToolCalling.normalize(messages) +
                 ChatCore.Msg("system", ToolCalling.instructions(tools, forcedTool, afterToolResult))
-        val schema = if (tools.isEmpty()) null else ToolCalling.responseSchema(tools, forcedTool)
+            formatSchema != null -> messages + ChatCore.Msg("system", ToolCalling.jsonInstructions(formatSchema))
+            else -> messages
+        }
+        // tool_choice:"required" → si el modelo contesta texto en vez de llamar,
+        // se reintenta una vez forzando la primera herramienta.
+        val toolRequired = tools.isNotEmpty() && ToolCalling.toolChoiceRequired(req)
 
         val preview = messages.lastOrNull { it.role == "user" }?.text?.take(40)?.replace("\n", " ") ?: ""
         lastRequest = "#$served ${if (stream) "stream" else "once"}" +
@@ -391,12 +575,31 @@ class ApiServer(
                 respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
                 return
             }
-            val parsed = if (tools.isEmpty()) null else ToolCalling.parseOutput(raw)
-            val answer = parsed?.answer?.takeIf { parsed.call == null } ?: raw
+            var parsed = if (tools.isEmpty()) null else ToolCalling.parseOutput(raw)
+            var finalRaw = raw
+            if (toolRequired && parsed?.call == null) {
+                val forcedName = tools.first().name
+                val retryMsgs = ToolCalling.normalize(messages) +
+                    ChatCore.Msg("system", ToolCalling.instructions(tools, forcedName))
+                val retry = runCatching {
+                    runBlocking {
+                        ChatCore.generate(
+                            retryMsgs, temperature, maxTokens, onDelta = {},
+                            jsonSchema = ToolCalling.responseSchema(tools, forcedName),
+                        )
+                    }
+                }.getOrNull()
+                if (retry != null) {
+                    finalRaw = retry
+                    parsed = ToolCalling.parseOutput(retry)
+                }
+            }
+            var answer = parsed?.answer?.takeIf { parsed.call == null } ?: finalRaw
+            if (formatSchema != null) answer = ToolCalling.normalizeJsonOutput(answer)
             val usage = JSONObject()
                 .put("prompt_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length }))
-                .put("completion_tokens", estimateTokens(raw.length))
-                .put("total_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length } + raw.length))
+                .put("completion_tokens", estimateTokens(finalRaw.length))
+                .put("total_tokens", estimateTokens(effectiveMessages.sumOf { it.text.length } + finalRaw.length))
             val call = parsed?.call
             if (call != null) {
                 val calls = JSONArray().put(
@@ -465,7 +668,13 @@ class ApiServer(
 
     // ==================== HTTP output ====================
 
-    private fun respond(s: Socket, code: Int, contentType: String?, body: ByteArray) {
+    private fun respond(
+        s: Socket,
+        code: Int,
+        contentType: String?,
+        body: ByteArray,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ) {
         val out = s.getOutputStream()
         val sb = StringBuilder()
         sb.append("HTTP/1.1 ").append(code).append(' ').append(statusText(code)).append("\r\n")
@@ -473,6 +682,7 @@ class ApiServer(
         sb.append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
         sb.append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n")
         if (contentType != null) sb.append("Content-Type: ").append(contentType).append("\r\n")
+        extraHeaders.forEach { (k, v) -> sb.append(k).append(": ").append(v).append("\r\n") }
         sb.append("Content-Length: ").append(body.size).append("\r\n")
         sb.append("Connection: close\r\n\r\n")
         out.write(sb.toString().toByteArray())
@@ -480,8 +690,14 @@ class ApiServer(
         out.flush()
     }
 
-    private fun respondJson(s: Socket, code: Int, obj: JSONObject) =
-        respond(s, code, "application/json; charset=utf-8", obj.toString().toByteArray(Charsets.UTF_8))
+    private fun respondJson(s: Socket, code: Int, obj: JSONObject, extraHeaders: Map<String, String> = emptyMap()) =
+        respond(s, code, "application/json; charset=utf-8", obj.toString().toByteArray(Charsets.UTF_8), extraHeaders)
+
+    /** 429 con `Retry-After` (el cliente OpenAI reintenta solo). */
+    private fun busy(s: Socket, msg: String) = respondJson(
+        s, 429, OpenAiApi.error(msg, OpenAiApi.ErrorType.RATE_LIMIT),
+        mapOf("Retry-After" to "1"),
+    )
 
     /** SSE header: chunked transfer, no Content-Length upfront; send while computing */
     private fun writeHead(out: OutputStream, code: Int, contentType: String) {

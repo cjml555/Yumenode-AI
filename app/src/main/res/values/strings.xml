@@ -621,4 +621,7 @@
     <string name="s_588">Peer URLs (one per line, http://IP:port)</string>
         <string name="s_share_text">Text received from another app</string>
     <string name="s_share_image">Image attached from another app</string>
+    <string name="s_emb_toggle">Embeddings mode (for /v1/embeddings)</string>
+    <string name="s_emb_hint">Loads the GGUF without KV cache so it can compute vectors; chat gets slower. Applies when you reload the model.</string>
+    <string name="s_emb_need_reload">Embeddings mode changed: reload the model to apply it.</string>
 </resources>

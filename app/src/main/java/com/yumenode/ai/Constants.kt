@@ -29,6 +29,8 @@ internal const val KEY_UI_ABOUT_OPEN = "uiAboutOpen"
 internal const val MAX_TAG_ROUNDS = 2
 // ---- think-mode toggle (global pref, model-independent) ----
 internal const val KEY_CHAT_THINK = "chatThink"
+// ---- modo embeddings (carga el GGUF con setEmbedding; sin KV cache) ----
+internal const val KEY_CHAT_EMBEDDINGS = "chatEmbeddings"
 
 // ---- GPU experimental (Vulkan) opt-in + trial crash marker ----
 internal const val KEY_GPU_EXPERIMENTAL = "gpuExperimental"

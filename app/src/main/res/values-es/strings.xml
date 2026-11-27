@@ -622,4 +622,7 @@
     <string name="s_574">Copiar</string>
     <string name="s_share_text">Texto recibido de otra app</string>
     <string name="s_share_image">Imagen adjunta desde otra app</string>
+    <string name="s_emb_toggle">Modo embeddings (para /v1/embeddings)</string>
+    <string name="s_emb_hint">Carga el GGUF sin KV cache para poder calcular vectores; el chat irá más lento. Surte efecto al recargar el modelo.</string>
+    <string name="s_emb_need_reload">Modo embeddings cambiado: recarga el modelo para aplicarlo.</string>
 </resources>

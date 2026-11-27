@@ -197,4 +197,55 @@ class ToolCallingTest {
         assertTrue(out[1].text.startsWith("Resultado de la herramienta:"))
         assertTrue(out[1].text.contains("temp"))
     }
+
+    @Test fun `responseFormatSchema json_object produce un objeto`() {
+        val req = JSONObject().put("response_format", JSONObject().put("type", "json_object"))
+        assertEquals("{\"type\":\"object\"}", ToolCalling.responseFormatSchema(req))
+    }
+
+    @Test fun `responseFormatSchema json_schema usa el schema del cliente`() {
+        val schema = JSONObject().put("type", "object").put("properties", JSONObject().put("a", JSONObject().put("type", "integer")))
+        val req = JSONObject().put("response_format", JSONObject()
+            .put("type", "json_schema")
+            .put("json_schema", JSONObject().put("name", "x").put("schema", schema)))
+        assertEquals(schema.toString(), ToolCalling.responseFormatSchema(req))
+    }
+
+    @Test fun `responseFormatSchema text o ausente no restringe`() {
+        assertNull(ToolCalling.responseFormatSchema(JSONObject()))
+        assertNull(ToolCalling.responseFormatSchema(JSONObject().put("response_format", JSONObject().put("type", "text"))))
+    }
+
+    @Test fun `tool_choice required se detecta`() {
+        assertTrue(ToolCalling.toolChoiceRequired(JSONObject().put("tool_choice", "required")))
+        assertTrue(!ToolCalling.toolChoiceRequired(JSONObject().put("tool_choice", "auto")))
+        assertTrue(!ToolCalling.toolChoiceRequired(JSONObject()))
+    }
+
+    @Test fun `embeddings serializa vectores con indice`() {
+        val body = OpenAiApi.embeddings("m", listOf(floatArrayOf(0.1f, 0.2f), floatArrayOf(0.3f)), JSONObject().put("total_tokens", 4))
+        assertEquals("list", body.getString("object"))
+        val data = body.getJSONArray("data")
+        assertEquals(2, data.length())
+        assertEquals(2, data.getJSONObject(0).getJSONArray("embedding").length())
+        assertEquals(1, data.getJSONObject(1).getInt("index"))
+        assertEquals("embedding", data.getJSONObject(0).getString("object"))
+    }
+
+    @Test fun `textCompletion usa object text_completion`() {
+        val body = OpenAiApi.textCompletion("cmpl-1", "m", 0L, "hola", JSONObject().put("total_tokens", 1))
+        assertEquals("text_completion", body.getString("object"))
+        val choice = body.getJSONArray("choices").getJSONObject(0)
+        assertEquals("hola", choice.getString("text"))
+        assertEquals("stop", choice.getString("finish_reason"))
+    }
+
+    @Test fun `normalizeJsonOutput quita vallas de codigo`() {
+        val raw = "```json\n{\"x\":\"ZZZ\"}\n```"
+        assertEquals("{\"x\":\"ZZZ\"}", ToolCalling.normalizeJsonOutput(raw))
+    }
+
+    @Test fun `normalizeJsonOutput deja el texto si no hay JSON`() {
+        assertEquals("hola", ToolCalling.normalizeJsonOutput("hola"))
+    }
 }

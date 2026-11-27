@@ -83,7 +83,12 @@ La app puede servir el modelo de chat **cargado en el dispositivo** por HTTP, co
 formato OpenAI. Esto permite apuntar un agente local (OpenCode, Hermes, Codex, etc.)
 al modelo del teléfono:
 
-- `GET /health`, `GET /v1/models`, `POST /v1/chat/completions` (soporta `stream` SSE).
+- `GET /health`, `GET /v1/models`, `GET /v1/models/{id}`, `POST /v1/chat/completions`
+  (soporta `stream` SSE), `POST /v1/completions` (legacy), `POST /v1/embeddings`
+  (solo GGUF y con **Modo embeddings** activado al cargar el modelo: sin KV cache).
+- `response_format` (`json_object` / `json_schema`) se cumple por instrucción de sistema y
+  limpieza de la salida: el binding no aplica gramáticas en `generateChat`.
+- `429` responde con `Retry-After: 1`.
 - **Tool calling** (`tools` / `tool_choice`, formato OpenAI): solo con backend **GGUF**.
   El modelo recibe la descripción de las herramientas y se le obliga a responder un
   JSON válido (`withJsonSchema`, decodificación restringida), que la app traduce a

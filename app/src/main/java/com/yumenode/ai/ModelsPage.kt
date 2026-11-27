@@ -124,6 +124,16 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             ui.hintText(getString(R.string.s_075)),
             matchWrap(topMargin = 4)
         )
+        // Modo embeddings: carga el GGUF con enableEmbedding() (sin KV cache)
+        val embCheck = android.widget.CheckBox(activity).apply {
+            text = getString(R.string.s_emb_toggle)
+            isChecked = host.chatEmbeddings
+            setTextColor(C_TEXT)
+            textSize = 13f
+            setOnCheckedChangeListener { _, value -> host.onSetChatEmbeddings(value) }
+        }
+        card.addView(embCheck, matchWrap(topMargin = 6))
+        card.addView(ui.hintText(getString(R.string.s_emb_hint)), matchWrap(topMargin = 2))
 
         // ================= Chat model =================
         val chatCard = ui.sectionCard()

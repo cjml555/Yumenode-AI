@@ -513,4 +513,7 @@
     <string name="s_566">实验 GPU 已在一次意外关闭后自动关闭。</string>
     <string name="s_share_text">来自其他应用的文本</string>
     <string name="s_share_image">来自其他应用的图片</string>
+    <string name="s_emb_toggle">嵌入模式（用于 /v1/embeddings）</string>
+    <string name="s_emb_hint">加载 GGUF 时不使用 KV 缓存以计算向量；对话会变慢。重新加载模型后生效。</string>
+    <string name="s_emb_need_reload">嵌入模式已更改：重新加载模型以生效。</string>
 </resources>

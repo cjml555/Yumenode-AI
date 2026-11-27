@@ -242,4 +242,64 @@ object OpenAiApi {
         .put("object", "list")
         .put("data", JSONArray().put(JSONObject()
             .put("id", id).put("object", "model").put("created", created).put("owned_by", ownedBy)))
+
+    // ==================== Completions (legacy) y embeddings ====================
+
+    /** Un modelo suelto (`GET /v1/models/{id}`). */
+    fun model(id: String, ownedBy: String, created: Long): JSONObject = JSONObject()
+        .put("id", id).put("object", "model").put("created", created).put("owned_by", ownedBy)
+
+    /**
+     * Respuesta de `POST /v1/completions` (text_completion, no chat).
+     *
+     * @param text    texto generado
+     * @param usage   conteo de tokens
+     */
+    fun textCompletion(
+        id: String,
+        model: String,
+        created: Long,
+        text: String,
+        usage: JSONObject,
+    ): JSONObject = JSONObject()
+        .put("id", id).put("object", "text_completion").put("created", created).put("model", model)
+        .put("choices", JSONArray().put(JSONObject()
+            .put("text", text)
+            .put("index", 0)
+            .put("logprobs", JSONObject.NULL)
+            .put("finish_reason", "stop")))
+        .put("usage", usage)
+
+    /** Chunk SSE de `text_completion`. */
+    fun textCompletionChunk(id: String, model: String, created: Long, text: String): JSONObject = JSONObject()
+        .put("id", id).put("object", "text_completion").put("created", created).put("model", model)
+        .put("choices", JSONArray().put(JSONObject()
+            .put("text", text).put("index", 0).put("logprobs", JSONObject.NULL)
+            .put("finish_reason", JSONObject.NULL)))
+
+    /**
+     * Respuesta de `POST /v1/embeddings`.
+     *
+     * @param vectors vectores ya calculados, en el mismo orden que la entrada
+     */
+    fun embeddings(
+        model: String,
+        vectors: List<FloatArray>,
+        usage: JSONObject,
+    ): JSONObject {
+        val data = JSONArray()
+        vectors.forEachIndexed { i, v ->
+            val arr = JSONArray()
+            v.forEach { arr.put(it.toDouble()) }
+            data.put(JSONObject()
+                .put("object", "embedding")
+                .put("index", i)
+                .put("embedding", arr))
+        }
+        return JSONObject()
+            .put("object", "list")
+            .put("model", model)
+            .put("data", data)
+            .put("usage", usage)
+    }
 }
