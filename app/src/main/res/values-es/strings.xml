@@ -634,4 +634,5 @@
     <string name="s_a11y_delete">Borrar chat</string>
     <string name="s_a11y_results">%1$d resultados</string>
     <string name="s_a11y_results_one">1 resultado</string>
+    <string name="s_078_emb">Modelo de chat cargado (llama.cpp · CPU · modo embeddings)</string>
 </resources>

@@ -148,8 +148,12 @@ class ModelLoadController(private val host: ModelLoadHost) : ThemeAliases {
             host.conversation = null
             host.convThinking = null
             host.setStatus(
-                if (onGpu) host.activity.getString(R.string.s_078_gpu)
-                else host.activity.getString(R.string.s_078),
+                when {
+                    onGpu -> host.activity.getString(R.string.s_078_gpu)
+                    host.prefBool(KEY_CHAT_EMBEDDINGS, false) ->
+                        host.activity.getString(R.string.s_078_emb)
+                    else -> host.activity.getString(R.string.s_078)
+                },
                 C_OK,
             )
             if (gpuWanted && !onGpu) {

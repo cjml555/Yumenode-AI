@@ -633,4 +633,5 @@
     <string name="s_a11y_delete">Delete chat</string>
     <string name="s_a11y_results">%1$d results</string>
     <string name="s_a11y_results_one">1 result</string>
+    <string name="s_078_emb">Chat model loaded (llama.cpp · CPU · embeddings mode)</string>
 </resources>
