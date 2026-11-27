@@ -72,7 +72,7 @@
     <string name="s_071">复制</string>
     <string name="s_072">复制失败</string>
     <string name="s_074">对话</string>
-    <string name="s_075">对话与绘图共用。绘图在设备支持 Vulkan 时走 GPU，不支持会自动回退 CPU；打标走 NNAPI；GGUF 对话始终用 CPU。</string>
+    <string name="s_075">对话与绘图共用。绘图和 GGUF 对话在设备支持 Vulkan 时走 GPU，不支持会自动回退 CPU；打标走 NNAPI。</string>
     <string name="s_076">对话模型</string>
     <string name="s_077">对话模型加载完成。绘图模型也已加载时，直接说「画一张…」就会调它出图；否则请到「绘图」页。</string>
     <string name="s_078">对话模型已加载（llama.cpp · CPU · KV 复用）</string>

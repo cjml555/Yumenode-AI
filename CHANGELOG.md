@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   array), `frequency_penalty`, `presence_penalty`, `repeat_penalty` (extra de llama.cpp) y
   `cache_prompt`. Los valores fuera de rango se recortan; lo que no se envía usa los valores
   por defecto de la app. Parser puro en `SamplingParams` (8 tests).
+- `stream_options: {include_usage: true}` en el stream SSE: chunk final con `choices: []` y
+  `usage`, como esperan LiteLLM/LangChain.
+
+### Fixed
+- Cadena del panel de modelos que aún decía que el chat GGUF «siempre corre en CPU» (la GPU
+  es el valor por defecto desde 1.4.x).
 
 ### Fixed
 - **`response_format` ahora sí devuelve el JSON pedido**: se usa el conversor nativo

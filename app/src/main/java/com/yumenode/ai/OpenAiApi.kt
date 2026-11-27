@@ -150,6 +150,19 @@ object OpenAiApi {
         .put("choices", JSONArray().put(JSONObject()
             .put("index", 0).put("delta", JSONObject()).put("finish_reason", reason)))
 
+    /**
+     * Chunk final con el consumo, como pide `stream_options: {include_usage: true}`.
+     * OpenAI manda `choices: []` en ese chunk.
+     */
+    fun chatChunkUsage(id: String, model: String, created: Long, promptTokens: Int, totalTokens: Int): JSONObject =
+        JSONObject()
+            .put("id", id).put("object", "chat.completion.chunk").put("created", created).put("model", model)
+            .put("choices", JSONArray())
+            .put("usage", JSONObject()
+                .put("prompt_tokens", promptTokens)
+                .put("completion_tokens", totalTokens - promptTokens)
+                .put("total_tokens", totalTokens))
+
     // ==================== Tool calling ====================
 
     /** Entrada `tool_calls[]` de OpenAI con argumentos ya serializados. */

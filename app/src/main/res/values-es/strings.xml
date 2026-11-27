@@ -72,7 +72,7 @@
 <string name="s_071">Copiar</string>
 <string name="s_072">Error al copiar</string>
 <string name="s_074">Chat</string>
-<string name="s_075">Compartido por chat y dibujo. El dibujo usa la GPU cuando el dispositivo soporta Vulkan (si no, CPU, con fallback automático); el etiquetado usa NNAPI; el chat GGUF siempre corre en CPU.</string>
+<string name="s_075">Compartido por chat y dibujo. El dibujo y el chat GGUF usan la GPU cuando el dispositivo soporta Vulkan (si no, CPU, con fallback automático); el etiquetado usa NNAPI.</string>
 <string name="s_076">Modelo de chat</string>
 <string name="s_077">Modelo de chat cargado. Si también hay un modelo de dibujo cargado, di «dibuja ...» y se usará; si no, usa la página Dibujar.</string>
 <string name="s_078">Modelo de chat cargado (llama.cpp · CPU · reutilización KV)</string>
