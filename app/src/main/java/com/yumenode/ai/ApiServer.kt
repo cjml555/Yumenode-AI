@@ -425,7 +425,7 @@ class ApiServer(
             runBlocking {
                 ChatCore.generate(messages, sampling.temperature, sampling.maxTokens, onDelta = { piece ->
                     event(OpenAiApi.textCompletionChunk(id, model, created, piece))
-                }, jsonSchema = schema)
+                }, jsonSchema = schema, opts = SamplingParams.from(req))
             }
             if (!broke) {
                 event(OpenAiApi.textCompletionChunk(id, model, created, "").apply {
@@ -552,6 +552,8 @@ class ApiServer(
             ToolCalling.responseFormatSchema(req)
         } else null
         val schema = toolSchema ?: formatSchema
+        // Parámetros de muestreo por petición (top_p, top_k, seed, stop, penalizaciones…).
+        val opts = SamplingParams.from(req)
         val effectiveMessages = when {
             tools.isNotEmpty() -> ToolCalling.normalize(messages) +
                 ChatCore.Msg("system", ToolCalling.instructions(tools, forcedTool, afterToolResult))
@@ -569,7 +571,7 @@ class ApiServer(
         if (!stream) {
             val raw = runCatching {
                 runBlocking { ChatCore.generate(
-                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema
+                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema, opts = opts
                 ) }
             }.getOrElse { e ->
                 respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
@@ -585,7 +587,7 @@ class ApiServer(
                     runBlocking {
                         ChatCore.generate(
                             retryMsgs, temperature, maxTokens, onDelta = {},
-                            jsonSchema = ToolCalling.responseSchema(tools, forcedName),
+                            jsonSchema = ToolCalling.responseSchema(tools, forcedName), opts = opts,
                         )
                     }
                 }.getOrNull()
@@ -611,7 +613,7 @@ class ApiServer(
                     )
                     val retry = runCatching {
                         runBlocking {
-                            ChatCore.generate(fixMsgs, temperature, maxTokens, onDelta = {}, jsonSchema = schema)
+                            ChatCore.generate(fixMsgs, temperature, maxTokens, onDelta = {}, jsonSchema = schema, opts = opts)
                         }
                     }.getOrNull()
                     val fixed = retry?.let { ToolCalling.normalizeJsonOutput(it) }
@@ -653,7 +655,7 @@ class ApiServer(
                 // Con herramientas el JSON solo es válido al terminar: se
                 // acumula y se emite una única entrada tool_calls completa.
                 val raw = runBlocking { ChatCore.generate(
-                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema
+                    effectiveMessages, temperature, maxTokens, onDelta = {}, jsonSchema = schema, opts = opts
                 ) }
                 val call = ToolCalling.parseOutput(raw).call
                 if (call != null) {
@@ -670,7 +672,7 @@ class ApiServer(
                 runBlocking {
                     ChatCore.generate(
                         effectiveMessages, temperature, maxTokens,
-                        onDelta = { piece -> deltaEvent(piece) }
+                        onDelta = { piece -> deltaEvent(piece) }, opts = opts,
                     )
                 }
                 event(OpenAiApi.chatChunkFinish(id, model, created))

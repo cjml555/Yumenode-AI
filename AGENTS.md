@@ -89,6 +89,8 @@ al modelo del teléfono:
 - `response_format` (`json_object` / `json_schema`) se cumple por instrucción de sistema y
   limpieza de la salida: el binding no aplica gramáticas en `generateChat`.
 - `429` responde con `Retry-After: 1`.
+- Muestreo por petición: `top_p`, `top_k`, `min_p`, `seed`, `stop`, `frequency_penalty`,
+  `presence_penalty`, `repeat_penalty`, `cache_prompt` (parseados en `SamplingParams`).
 - **Tool calling** (`tools` / `tool_choice`, formato OpenAI): solo con backend **GGUF**.
   El modelo recibe la descripción de las herramientas y se le obliga a responder un
   JSON válido (`withJsonSchema`, decodificación restringida), que la app traduce a

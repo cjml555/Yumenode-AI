@@ -131,6 +131,22 @@ object ChatCore {
      * gguf has no system role, so it merges into the first user message).
      * Returns full answer; streaming fragments are passed via the [onDelta] callback (thinking content already stripped).
      */
+    /**
+     * Ajustes de muestreo por petición (los que manda un cliente OpenAI).
+     * null = usar el valor por defecto de la app.
+     */
+    data class GenOptions(
+        val topP: Float? = null,
+        val topK: Int? = null,
+        val minP: Float? = null,
+        val seed: Int? = null,
+        val stop: List<String> = emptyList(),
+        val frequencyPenalty: Float? = null,
+        val presencePenalty: Float? = null,
+        val repeatPenalty: Float? = null,
+        val cachePrompt: Boolean? = null,
+    )
+
     suspend fun generate(
         messages: List<Msg>,
         temperature: Float?,
@@ -138,6 +154,7 @@ object ChatCore {
         onDelta: (String) -> Unit,
         /** JSON Schema para decodificación restringida (solo GGUF llama.cpp). */
         jsonSchema: String? = null,
+        opts: GenOptions = GenOptions(),
     ): String = lock.withLock {
         busy = true
         cancelFlag = false
@@ -147,7 +164,7 @@ object ChatCore {
                 if (eng != null) runLiteRt(eng, messages, temperature, maxTokens, onDelta)
                 else {
                     val lm = llama ?: throw IllegalStateException("未加载对话模型")
-                    runGguf(lm, messages, temperature, maxTokens, onDelta, jsonSchema)
+                    runGguf(lm, messages, temperature, maxTokens, onDelta, jsonSchema, opts)
                 }
             }
         } finally {
@@ -241,6 +258,7 @@ object ChatCore {
         maxTokens: Int?,
         onDelta: (String) -> Unit,
         jsonSchema: String? = null,
+        opts: GenOptions = GenOptions(),
     ): String {
         val sys = messages.filter { it.role == "system" }.joinToString("\n") { it.text }.trim()
         val turns = messages.filter { it.role != "system" && it.text.isNotEmpty() }
@@ -256,14 +274,19 @@ object ChatCore {
         val params = InferenceParameters.empty()
             .withMessages(null, msgs)
             // cache_prompt + fixed slot: client resends history prefix each round, llama.cpp reuses it, no repeat prefill
-            .withCachePrompt(true)
+            .withCachePrompt(opts.cachePrompt ?: true)
             .withSlotId(0)
             .withNPredict(maxTokens ?: 1024)
             .withTemperature(temperature ?: 0.7f)
-            .withTopK(40)
-            .withTopP(0.95f)
-            .withRepeatPenalty(1.1f)
-            .withSeed((System.nanoTime() and 0x7FFFFFFF).toInt())
+            .withTopK(opts.topK ?: 40)
+            .withTopP(opts.topP ?: 0.95f)
+            .withRepeatPenalty(opts.repeatPenalty ?: 1.1f)
+            .withSeed(opts.seed ?: (System.nanoTime() and 0x7FFFFFFF).toInt())
+        // Penalizaciones y topes opcionales: solo se fijan si el cliente los pide.
+        opts.minP?.let { params.withMinP(it) }
+        opts.frequencyPenalty?.let { params.withFrequencyPenalty(it) }
+        opts.presencePenalty?.let { params.withPresencePenalty(it) }
+        if (opts.stop.isNotEmpty()) params.withStopStrings(*opts.stop.toTypedArray())
 
         // Decodificación restringida: la gramática derivada del JSON Schema hace
         // que el modelo solo pueda emitir un objeto válido (tool calling).

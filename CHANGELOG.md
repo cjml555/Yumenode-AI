@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Muestreo por petición** en la API: `top_p`, `top_k`, `min_p`, `seed`, `stop` (string o
+  array), `frequency_penalty`, `presence_penalty`, `repeat_penalty` (extra de llama.cpp) y
+  `cache_prompt`. Los valores fuera de rango se recortan; lo que no se envía usa los valores
+  por defecto de la app. Parser puro en `SamplingParams` (8 tests).
+
 ### Fixed
 - **`response_format` ahora sí devuelve el JSON pedido**: se usa el conversor nativo
   `LlamaModel.jsonSchemaToGrammar` en vez de un GBNF escrito a mano, la instrucción de
