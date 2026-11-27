@@ -67,8 +67,9 @@ object ToolCalling {
      * porque el binding no aplica gramáticas en `generateChat`).
      */
     fun jsonInstructions(schema: String): String =
-        "Responde EXCLUSIVAMENTE con un objeto JSON válido que cumpla este JSON Schema, " +
-            "sin texto antes ni después, sin vallas de código:\n" + schema
+        "Responde EXCLUSIVAMENTE con un valor JSON válido que cumpla este JSON Schema. " +
+            "No escribas texto antes ni después, no uses vallas de código y NO copies el " +
+            "schema en la respuesta: devuelve datos que lo cumplan.\nSchema:\n" + schema
 
     /** `tool_choice: "required"`: el cliente exige que se llame a alguna herramienta. */
     fun toolChoiceRequired(req: JSONObject): Boolean =
@@ -194,8 +195,61 @@ object ToolCalling {
      * Si no hay JSON válido, devuelve el texto tal cual.
      */
     fun normalizeJsonOutput(text: String): String {
-        val json = extractJsonObject(text) ?: return text.trim()
-        return if (runCatching { JSONObject(json) }.isSuccess) json else text.trim()
+        val raw = text.trim()
+        // 1) valla de código: ```json ... ``` (el modelo suele envolver la respuesta)
+        val fenced = Regex("```(?:json)?\\s*([\\s\\S]*?)```").find(raw)?.groupValues?.get(1)?.trim()
+        if (fenced != null && isJsonValue(fenced)) return fenced
+        // 2) el propio texto ya es JSON
+        if (isJsonValue(raw)) return raw
+        // 3) JSON embebido entre texto (objeto o array)
+        embeddedJson(raw)?.let { return it }
+        return raw
+    }
+
+    /** true si el texto es un objeto o array JSON válido. */
+    fun isJsonValue(text: String): Boolean =
+        runCatching { JSONObject(text) }.isSuccess || runCatching { JSONArray(text) }.isSuccess
+
+    /** Tipo de primer nivel del schema (`object`, `array`, …), si lo declara. */
+    fun schemaTopType(schema: String): String? =
+        runCatching {
+            JSONObject(schema).optString("type").takeIf { it.isNotBlank() }
+        }.getOrNull()
+
+    /** true si [text] es un JSON del tipo de primer nivel [type]. */
+    fun matchesTopType(text: String, type: String): Boolean = when (type) {
+        "array" -> runCatching { JSONArray(text) }.isSuccess
+        "object" -> runCatching { JSONObject(text) }.isSuccess
+        else -> true
+    }
+
+    /** Primer objeto/array JSON balanceado del texto, respetando cadenas y escapes. */
+    fun embeddedJson(text: String): String? {
+        val start = text.indexOfFirst { it == '{' || it == '[' }
+        if (start < 0) return null
+        val open = text[start]
+        val close = if (open == '{') '}' else ']'
+        var depth = 0
+        var inStr = false
+        var esc = false
+        for (i in start until text.length) {
+            val c = text[i]
+            when {
+                esc -> esc = false
+                c == '\\' && inStr -> esc = true
+                c == '"' -> inStr = !inStr
+                inStr -> {}
+                c == open -> depth++
+                c == close -> {
+                    depth--
+                    if (depth == 0) {
+                        val candidate = text.substring(start, i + 1)
+                        return if (isJsonValue(candidate)) candidate else null
+                    }
+                }
+            }
+        }
+        return null
     }
 
     /** Primer objeto JSON balanceado del texto (respeta cadenas y escapes). */
