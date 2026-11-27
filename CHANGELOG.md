@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.15] - 2026-11-27
+
 ### Fixed
 - **ANR al pulsar «Descargar modelo»**: el diálogo de permiso de notificaciones se abría
   justo al encolar la descarga y el cambio de foco se quedaba sin atender 10 s (ANR por
