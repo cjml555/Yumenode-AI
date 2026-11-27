@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`finish_reason` real**: se lee el motivo de parada que reporta llama.cpp en el stream
+  (`StopReason`) y se traduce al contrato OpenAI: `"length"` cuando se agota `max_tokens`,
+  `"stop"` en el resto. Antes siempre decía `"stop"`, lo que hacía que los clientes no
+  detectaran respuestas truncadas. Aplica a `/v1/chat/completions` normal y en stream.
+
 ## [1.4.12] - 2026-11-27
 
 ### Added

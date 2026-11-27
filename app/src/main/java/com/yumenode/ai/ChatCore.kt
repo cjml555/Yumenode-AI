@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.ladenthin.llama.LlamaModel
+import net.ladenthin.llama.value.StopReason
 import net.ladenthin.llama.parameters.InferenceParameters
 import net.ladenthin.llama.value.Pair as LlamaPair
 
@@ -172,6 +173,14 @@ object ChatCore {
         }
     }
 
+    /**
+     * Motivo por el que termino la ultima generacion, en el vocabulario de OpenAI
+     * ("stop" o "length"). Se reinicia en cada llamada a [generate].
+     */
+    @Volatile
+    var stopReason: String = "stop"
+        private set
+
     /** true si el backend cargado admite decodificación restringida (GGUF). */
     fun supportsJsonSchema(): Boolean = llama != null
 
@@ -310,12 +319,18 @@ object ChatCore {
         if (gpuPriority) {
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
         }
+        stopReason = "stop"
         val it = lm.generateChat(params).iterator()
         try {
             while (it.hasNext()) {
                 if (cancelFlag) break
                 val piece = it.next()
                 if (piece.text.isNotEmpty()) splitter.feed(piece.text)
+                // llama.cpp dice por que termino: se traduce al contrato OpenAI
+                // ("length" cuando se agoto max_tokens, "stop" en el resto).
+                if (piece.stop) {
+                    stopReason = if (piece.stopReason == StopReason.MAX_TOKENS) "length" else "stop"
+                }
             }
         } finally {
             runCatching { it.close() }
