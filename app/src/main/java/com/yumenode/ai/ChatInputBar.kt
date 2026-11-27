@@ -139,6 +139,7 @@ class ChatInputBar(private val host: InputBarHost) {
         row.addView(attachButton, LinearLayout.LayoutParams(ctx.dp(44), ctx.dp(44)).apply { leftMargin = ctx.dp(8) })
 
         sendButton = TextView(ctx).apply {
+            contentDescription = ctx.getString(R.string.s_a11y_send)
             text = "↑"
             textSize = 19f
             setTextColor(Color.WHITE)

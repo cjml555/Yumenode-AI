@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Búsqueda en el historial de chats**: campo de búsqueda en el panel lateral que filtra por
+  título y por el texto de cualquier turno (pregunta o respuesta), con contador de resultados
+  y un fragmento alrededor de la coincidencia. Lógica pura en `ChatSearch` (9 tests).
+
+### Fixed
+- **Accesibilidad**: los botones que solo llevan icono no tenían descripción para TalkBack.
+  Ahora la tienen el menú, «Nuevo chat», el botón enviar (y «Detener» mientras genera), el
+  borrar de cada chat, las filas del historial y las 6 pestañas inferiores.
+- Panel lateral: el buscador y la lista se separan para que filtrar no robe el foco ni el
+  cursor del campo de texto.
+
 ## [1.4.10] - 2026-11-27
 
 ### Added

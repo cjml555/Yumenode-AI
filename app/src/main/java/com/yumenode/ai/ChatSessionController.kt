@@ -94,6 +94,8 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
     fun mergeStreamDelta(cur: String, delta: String): String = ChatCore.mergeStream(cur, delta)
 
     fun setStoppingUi(stop: Boolean) {
+        sendButton.contentDescription =
+            activity.getString(if (stop) R.string.s_a11y_stop else R.string.s_a11y_send)
         if (stop) {
             sendButton.text = "■"
             sendButton.textSize = 16f
