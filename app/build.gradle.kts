@@ -5,6 +5,23 @@ plugins {
     id("com.android.application")
 }
 
+// Versión de la app.
+//
+// - `.github/workflows/release.yml` la inyecta desde el tag con las variables
+//   ORG_GRADLE_PROJECT_appVersionName / appVersionCode, de modo que el tag
+//   `v1.4.4` produce versionName "1.4.4" y versionCode 10404 (antes el
+//   workflow calculaba la versión pero no la pasaba a Gradle y los APK salían
+//   con la versión del fichero).
+// - En local, sin properties, valen los defaults de aquí, así que
+//   `./gradlew assembleFreeDebug` sigue funcionando sin argumentos.
+val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("1.4.4")
+val appVersionCode: Int = providers.gradleProperty("appVersionCode").map(String::toInt).getOrElse(10404)
+
+// El sabor premium es otra aplicación en Play (applicationId propio); el
+// desplazamiento 10xxx / 20xxx se mantiene para que las dos trazas de
+// versionCode se distingan al inspeccionar los APK/AAB.
+val premiumVersionCodeOffset = 10_000
+
 android {
     namespace = "com.yumenode.ai"
     compileSdk = 36
@@ -19,16 +36,15 @@ android {
         create("free") {
             dimension = "tier"
             applicationId = "com.yumenode.ai"
-            versionCode = 10403
-            versionName = "1.4.3"
+            versionCode = appVersionCode
+            versionName = appVersionName
             // Sin sufijo: el paquete base queda para el sabor free
         }
         create("premium") {
             dimension = "tier"
             applicationId = "com.yumenode.ai.premium"
-            versionCode = 10403
-            versionName = "1.4.3"
-            // Desplazamiento de versionCode para separar del free en Play
+            versionCode = appVersionCode + premiumVersionCodeOffset
+            versionName = appVersionName
         }
     }
 
@@ -36,8 +52,8 @@ android {
         applicationId = "com.yumenode.ai"
         minSdk = 28
         targetSdk = 36
-        versionCode = 10403
-        versionName = "1.4.3"
+        versionCode = appVersionCode
+        versionName = appVersionName
         ndk {
             // LiteRT-LM 与 llama.cpp 的 native 都只跑 arm64 真机，去掉 x86_64 可减小 APK
             abiFilters += "arm64-v8a"
@@ -98,6 +114,8 @@ android {
 
     // 自编 stable-diffusion.cpp：源码在 src/main/cpp（含内联 ggml），
     // 每次 assembleRelease 由 NDK 现场编译，产物直接进 APK，不再手工往 jniLibs 拷贝。
+    // ccache: lo activa src/main/cpp/CMakeLists.txt si el binario está en PATH
+    // (recompilar sd.cpp es el paso lento del build nativo).
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")

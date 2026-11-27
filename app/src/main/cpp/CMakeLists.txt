@@ -54,7 +54,7 @@ set(GGML_CPU_REPACK     ON  CACHE BOOL "" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE         OFF CACHE BOOL "" FORCE)
-set(GGML_CCACHE         OFF CACHE BOOL "" FORCE)
+set(GGML_CCACHE         ON  CACHE BOOL "" FORCE)  # usa ccache si está en PATH (acelera recompilaciones de sd.cpp/ggml); no-op si falta
 
 # ---------------------------------------------------------------------------
 # 引入 sd.cpp

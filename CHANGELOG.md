@@ -6,6 +6,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Versión de las releases**: `release.yml` calculaba `versionName`/`versionCode` desde el
+  tag pero nunca los pasaba a Gradle, así que los APK/AAB de v1.4.4 salieron con
+  `versionName=1.4.3` y `versionCode=10403` (comprobado con `aapt2 dump badging` sobre los
+  binarios publicados). Ahora:
+  - el workflow exporta `ORG_GRADLE_PROJECT_appVersionName` / `..._appVersionCode`, que
+    Gradle mapea a project properties sin tocar ficheros;
+  - `app/build.gradle.kts` los lee con `providers.gradleProperty(...)` y mantiene los
+    defaults locales (build sin argumentos sigue dando la última versión);
+  - el sabor premium aplica el desplazamiento `+10000` que el CHANGELOG documentaba
+    (10xxx free / 20xxx premium) y que no se estaba aplicando;
+  - el job **falla** si el APK no lleva la versión del tag;
+  - el commit de bump vuelve a actualizar los defaults de `build.gradle.kts` (antes era un
+    no-op porque el fichero nunca cambiaba).
+
+### Changed
+- **Build nativo con ccache**: `GGML_CCACHE` pasa a `ON` en `app/src/main/cpp/CMakeLists.txt`.
+  Si `ccache` está en `PATH`, ggml/sd.cpp lo usa como launcher y las recompilaciones de
+  `libyumenode_sd.so` reutilizan objetos (en CI, sin ccache instalado, no cambia nada).
+
+## [1.4.4] - 2026-11-18
+
+### Added
+- **Cluster router premium protegido** con pin del certificado de firma (SHA-256): el
+  router LAN solo se activa en el APK premium legítimo.
+- **Flash attention + GPU por defecto** en chat GGUF, decisión de backend centralizada en
+  `InferencePerfProfile` con KV cache automático según RAM del dispositivo.
+- **llama-android-vulkan 6.0.0** (llama.cpp `6050b467c`) con los arreglos de JNI para NDK
+  r29 y sonda/guardas de BDA en Adreno.
+
+### Fixed
+- **Pantalla negra al arrancar**: `buildBottomNav` se implementa directamente en
+  `MainActivity`; delegar en `ShellController` volvía a llamar al host y producía
+  `StackOverflowError`.
+- Build roto por `awaitClose` en la descarga de modelos (el símbolo no existía en el código
+  base; verificado con `compileFreeDebugKotlin`).
+
+### Known issue
+- Los binarios de esta release se publicaron con `versionName=1.4.3` por el fallo de
+  inyección de versión descrito en [Unreleased]. Corregido a partir de la siguiente release.
+
 ## [1.4.3] - 2026-11-14
 
 ### Added
