@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-11-27
+
 ### Added
 - **API OpenAI más completa** (probada contra el teléfono con `curl`):
   - `GET /v1/models/{id}` — el modelo cargado, o 404.
