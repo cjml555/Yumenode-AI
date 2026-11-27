@@ -88,7 +88,9 @@ al modelo del teléfono:
   (solo GGUF y con **Modo embeddings** activado al cargar el modelo: sin KV cache).
 - `response_format` (`json_object` / `json_schema`) se cumple por instrucción de sistema y
   limpieza de la salida: el binding no aplica gramáticas en `generateChat`.
-- `429` responde con `Retry-After: 1`.
+- `429` responde con `Retry-After: 1`; `finish_reason` es `"length"` si se agota `max_tokens`.
+- Smoke test de la API contra el dispositivo: `tools/api-smoke.sh [base-url]`
+  (`EMBEDDINGS=1` añade la prueba de embeddings). Sale con código 0 solo si todo pasa.
 - Muestreo por petición: `top_p`, `top_k`, `min_p`, `seed`, `stop`, `frequency_penalty`,
   `presence_penalty`, `repeat_penalty`, `cache_prompt` (parseados en `SamplingParams`).
 - **Tool calling** (`tools` / `tool_choice`, formato OpenAI): solo con backend **GGUF**.
