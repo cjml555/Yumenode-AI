@@ -646,8 +646,19 @@ class ApiServer(
                 ChatCore.requestCancel()   // client disconnected, stop computing
             }
         }
+        // Texto emitido, para el chunk de `usage` cuando el cliente lo pide.
+        val streamed = StringBuilder()
         fun deltaEvent(content: String, role: String? = null) {
+            if (content.isNotEmpty()) streamed.append(content)
             event(OpenAiApi.chatChunk(id, model, created, content, role))
+        }
+        // stream_options: {include_usage: true} → chunk final con choices: [] y usage.
+        val wantUsage = req.optJSONObject("stream_options")?.optBoolean("include_usage") == true
+        fun emitUsage() {
+            if (!wantUsage) return
+            val pt = estimateTokens(effectiveMessages.sumOf { it.text.length })
+            val ct = estimateTokens(streamed.length)
+            event(OpenAiApi.chatChunkUsage(id, model, created, pt, pt + ct))
         }
         try {
             deltaEvent("", role = "assistant")
@@ -677,6 +688,7 @@ class ApiServer(
                 }
                 event(OpenAiApi.chatChunkFinish(id, model, created))
             }
+            emitUsage()
             if (!broke) writeChunk(out, OpenAiApi.SSE_DONE)
         } catch (e: Throwable) {
             if (!broke) {

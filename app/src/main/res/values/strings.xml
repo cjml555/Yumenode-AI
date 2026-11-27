@@ -72,7 +72,7 @@
 <string name="s_071">Copy</string>
 <string name="s_072">Copy failed</string>
 <string name="s_074">Chat</string>
-<string name="s_075">Shared by chat and drawing. Drawing uses the GPU when the device supports Vulkan (otherwise CPU, with automatic fallback); tagging uses NNAPI; GGUF chat always runs on CPU.</string>
+<string name="s_075">Shared by chat and drawing. Drawing and GGUF chat use the GPU when the device supports Vulkan (otherwise CPU, with automatic fallback); tagging uses NNAPI.</string>
 <string name="s_076">Chat model</string>
 <string name="s_077">Chat model loaded. If a draw model is loaded too, just say \"draw a ...\" and it will be used; otherwise use the Draw page.</string>
 <string name="s_078">Chat model loaded (llama.cpp · CPU · KV reuse)</string>
