@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-11-27
+
 ### Added
 - **Muestreo por petición** en la API: `top_p`, `top_k`, `min_p`, `seed`, `stop` (string o
   array), `frequency_penalty`, `presence_penalty`, `repeat_penalty` (extra de llama.cpp) y
