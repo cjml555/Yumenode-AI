@@ -135,7 +135,7 @@ class DownloadPage(
                 typeface = Typeface.DEFAULT_BOLD
             }
             val descTv = TextView(ctx).apply {
-                text = "${info.description} · ${Formatters.size(info.sizeBytes)}"
+                text = "${ctx.getString(info.descriptionRes)} · ${Formatters.size(info.sizeBytes)}"
                 textSize = 12f
                 setTextColor(C_SUBTEXT)
             }

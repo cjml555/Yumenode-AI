@@ -51,7 +51,7 @@ object ModelDownloader {
         // GGUF models (llama.cpp)
         "gemma-2-2b-it-q4_k_m.gguf" to ModelInfo(
             name = "Gemma 2 2B Instruct Q4_K_M",
-            description = "Google Gemma 2 2B - Eficiente y rápido, buena calidad general",
+            descriptionRes = R.string.md_001,
             url = "$HF_MIRROR/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
             sizeBytes = 1_708_582_752L,
             format = ModelFormat.GGUF,
@@ -61,7 +61,7 @@ object ModelDownloader {
         ),
         "gemma-2-2b-it-q8_0.gguf" to ModelInfo(
             name = "Gemma 2 2B Instruct Q8_0",
-            description = "Google Gemma 2 2B - Mayor calidad, más memoria",
+            descriptionRes = R.string.md_002,
             url = "$HF_MIRROR/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
             sizeBytes = 2_784_495_456L,
             format = ModelFormat.GGUF,
@@ -71,7 +71,7 @@ object ModelDownloader {
         ),
         "gemma-3n-e4b-it-q4_k_m.gguf" to ModelInfo(
             name = "Gemma 3n E4B Instruct Q4_K_M",
-            description = "Google Gemma 3n E4B - Multilingüe y eficiente (texto)",
+            descriptionRes = R.string.md_003,
             url = "$HF_MIRROR/unsloth/gemma-3n-E4B-it-GGUF/resolve/main/gemma-3n-E4B-it-Q4_K_M.gguf",
             sizeBytes = 4_539_054_208L,
             format = ModelFormat.GGUF,
@@ -81,7 +81,7 @@ object ModelDownloader {
         ),
         "phi-3-mini-4k-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Phi-3 Mini 4K Instruct Q4_K_M",
-            description = "Microsoft Phi-3 - Muy eficiente, 4K context",
+            descriptionRes = R.string.md_004,
             url = "$HF_MIRROR/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf",
             sizeBytes = 2_393_231_072L,
             format = ModelFormat.GGUF,
@@ -91,7 +91,7 @@ object ModelDownloader {
         ),
         "phi-3.5-mini-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Phi-3.5 Mini Instruct Q4_K_M",
-            description = "Microsoft Phi-3.5 - Mejorado, 128K context",
+            descriptionRes = R.string.md_005,
             url = "$HF_MIRROR/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
             sizeBytes = 2_393_232_672L,
             format = ModelFormat.GGUF,
@@ -101,7 +101,7 @@ object ModelDownloader {
         ),
         "llama-3.2-1b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Llama 3.2 1B Instruct Q4_K_M",
-            description = "Meta Llama 3.2 1B - Ultra ligero, ideal para móviles",
+            descriptionRes = R.string.md_006,
             url = "$HF_MIRROR/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
             sizeBytes = 807_694_464L,
             format = ModelFormat.GGUF,
@@ -111,7 +111,7 @@ object ModelDownloader {
         ),
         "llama-3.2-3b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Llama 3.2 3B Instruct Q4_K_M",
-            description = "Meta Llama 3.2 3B - Balance calidad/tamaño",
+            descriptionRes = R.string.md_007,
             url = "$HF_MIRROR/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
             sizeBytes = 2_019_377_696L,
             format = ModelFormat.GGUF,
@@ -121,7 +121,7 @@ object ModelDownloader {
         ),
         "qwen2.5-1.5b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 2.5 1.5B Instruct Q4_K_M",
-            description = "Alibaba Qwen 2.5 - Fuerte en chino/inglés, muy eficiente",
+            descriptionRes = R.string.md_008,
             url = "$HF_MIRROR/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
             sizeBytes = 1_117_320_736L,
             format = ModelFormat.GGUF,
@@ -131,7 +131,7 @@ object ModelDownloader {
         ),
         "qwen2.5-3b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 2.5 3B Instruct Q4_K_M",
-            description = "Alibaba Qwen 2.5 3B - Mejor calidad, multilingüe",
+            descriptionRes = R.string.md_009,
             url = "$HF_MIRROR/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
             sizeBytes = 2_104_932_768L,
             format = ModelFormat.GGUF,
@@ -143,7 +143,7 @@ object ModelDownloader {
         // ── Modelos ligeros (ideales para probar rápido) ────────────────────
         "qwen2.5-0.5b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 2.5 0.5B Instruct Q4_K_M",
-            description = "Alibaba Qwen 2.5 - El más pequeño, arranca al instante",
+            descriptionRes = R.string.md_010,
             url = "$HF_MIRROR/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
             sizeBytes = 397_808_192L,
             format = ModelFormat.GGUF,
@@ -152,7 +152,7 @@ object ModelDownloader {
         ),
         "smollm2-1.7b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "SmolLM2 1.7B Instruct Q4_K_M",
-            description = "HuggingFace SmolLM2 - Rápido y bueno en inglés",
+            descriptionRes = R.string.md_011,
             url = "$HF_MIRROR/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
             sizeBytes = 1_055_609_824L,
             format = ModelFormat.GGUF,
@@ -163,7 +163,7 @@ object ModelDownloader {
         // ── Modelos con razonamiento (compatibles con "Thinking mode") ──────
         "deepseek-r1-distill-qwen-1.5b-q4_k_m.gguf" to ModelInfo(
             name = "DeepSeek R1 Distill Qwen 1.5B Q4_K_M",
-            description = "DeepSeek - Razonamiento paso a paso, muy ligero",
+            descriptionRes = R.string.md_012,
             url = "$HF_MIRROR/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
             sizeBytes = 1_117_320_800L,
             format = ModelFormat.GGUF,
@@ -173,7 +173,7 @@ object ModelDownloader {
         ),
         "qwen3-4b-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 3 4B Q4_K_M",
-            description = "Alibaba Qwen 3 - Razonamiento híbrido y multilingüe",
+            descriptionRes = R.string.md_013,
             url = "$HF_MIRROR/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
             sizeBytes = 2_497_281_312L,
             format = ModelFormat.GGUF,
@@ -185,7 +185,7 @@ object ModelDownloader {
         // ── Modelos medianos ────────────────────────────────────────────────
         "gemma-3-4b-it-q4_k_m.gguf" to ModelInfo(
             name = "Gemma 3 4B IT Q4_K_M",
-            description = "Google Gemma 3 - Buen equilibrio calidad/velocidad",
+            descriptionRes = R.string.md_014,
             url = "$HF_MIRROR/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
             sizeBytes = 2_489_894_016L,
             format = ModelFormat.GGUF,
@@ -194,7 +194,7 @@ object ModelDownloader {
         ),
         "phi-4-mini-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Phi-4 Mini Instruct Q4_K_M",
-            description = "Microsoft Phi-4 Mini - Fuerte en matemáticas y código",
+            descriptionRes = R.string.md_015,
             url = "$HF_MIRROR/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
             sizeBytes = 2_491_874_272L,
             format = ModelFormat.GGUF,
@@ -205,7 +205,7 @@ object ModelDownloader {
         // ── Modelos grandes (necesitan 6-8 GB de RAM libre) ─────────────────
         "mistral-7b-instruct-v0.3-q4_k_m.gguf" to ModelInfo(
             name = "Mistral 7B Instruct v0.3 Q4_K_M",
-            description = "Mistral AI - Clásico versátil, buena escritura",
+            descriptionRes = R.string.md_016,
             url = "$HF_MIRROR/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
             sizeBytes = 4_372_812_000L,
             format = ModelFormat.GGUF,
@@ -214,7 +214,7 @@ object ModelDownloader {
         ),
         "qwen2.5-7b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 2.5 7B Instruct Q4_K_M",
-            description = "Alibaba Qwen 2.5 7B - Excelente en chino/inglés",
+            descriptionRes = R.string.md_017,
             url = "$HF_MIRROR/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
             sizeBytes = 4_683_074_240L,
             format = ModelFormat.GGUF,
@@ -223,7 +223,7 @@ object ModelDownloader {
         ),
         "qwen2.5-coder-7b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Qwen 2.5 Coder 7B Instruct Q4_K_M",
-            description = "Alibaba Qwen 2.5 Coder - Especializado en programación",
+            descriptionRes = R.string.md_018,
             url = "$HF_MIRROR/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
             sizeBytes = 4_683_074_336L,
             format = ModelFormat.GGUF,
@@ -232,7 +232,7 @@ object ModelDownloader {
         ),
         "llama-3.1-8b-instruct-q4_k_m.gguf" to ModelInfo(
             name = "Llama 3.1 8B Instruct Q4_K_M",
-            description = "Meta Llama 3.1 8B - La mejor calidad de la lista",
+            descriptionRes = R.string.md_019,
             url = "$HF_MIRROR/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
             sizeBytes = 4_920_739_232L,
             format = ModelFormat.GGUF,
@@ -246,7 +246,7 @@ object ModelDownloader {
         // litert-community, que no pide autenticación.
         "qwen-2.5-1.5b-litert-q8.litertlm" to ModelInfo(
             name = "Qwen 2.5 1.5B LiteRT Q8",
-            description = "Alibaba Qwen 2.5 - Formato LiteRT-LM optimizado (GPU/NPU)",
+            descriptionRes = R.string.md_020,
             url = "$HF_MIRROR/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
             sizeBytes = 1_597_922_856L,
             format = ModelFormat.LITERTLM,
@@ -254,7 +254,7 @@ object ModelDownloader {
         ),
         "deepseek-r1-distill-1.5b-litert-q8.litertlm" to ModelInfo(
             name = "DeepSeek R1 Distill 1.5B LiteRT Q8",
-            description = "DeepSeek - Razonamiento paso a paso en LiteRT-LM",
+            descriptionRes = R.string.md_021,
             url = "$HF_MIRROR/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
             sizeBytes = 1_833_451_520L,
             format = ModelFormat.LITERTLM,
@@ -263,7 +263,7 @@ object ModelDownloader {
         ),
         "phi-4-mini-litert-q8.litertlm" to ModelInfo(
             name = "Phi-4 Mini LiteRT Q8",
-            description = "Microsoft Phi-4 Mini - LiteRT-LM, bueno en matemáticas",
+            descriptionRes = R.string.md_022,
             url = "$HF_MIRROR/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
             sizeBytes = 3_910_090_752L,
             format = ModelFormat.LITERTLM,
@@ -275,7 +275,7 @@ object ModelDownloader {
         // por eso no están aquí. Variante f32 del Qwen: más calidad, ~6 GB.
         "qwen-2.5-1.5b-litert-f32.litertlm" to ModelInfo(
             name = "Qwen 2.5 1.5B LiteRT F32",
-            description = "Alibaba Qwen 2.5 - Precisión completa (necesita ~7 GB de RAM)",
+            descriptionRes = R.string.md_023,
             url = "$HF_MIRROR/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_f32_ekv4096.litertlm",
             sizeBytes = 6_182_436_864L,
             format = ModelFormat.LITERTLM,
@@ -283,7 +283,7 @@ object ModelDownloader {
         ),
         "qwen-3-0.6b-litert.litertlm" to ModelInfo(
             name = "Qwen 3 0.6B LiteRT",
-            description = "Alibaba Qwen 3 - El LiteRT más pequeño, con razonamiento",
+            descriptionRes = R.string.md_024,
             url = "$HF_MIRROR/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm",
             sizeBytes = 613_722_264L,
             format = ModelFormat.LITERTLM,
@@ -292,7 +292,7 @@ object ModelDownloader {
         ),
         "lfm-2.5-1.2b-thinking-litert.litertlm" to ModelInfo(
             name = "LFM 2.5 1.2B Thinking LiteRT",
-            description = "Liquid AI - Diseñado para razonar, muy compacto",
+            descriptionRes = R.string.md_025,
             url = "$HF_MIRROR/litert-community/LFM2.5-1.2B-Thinking/resolve/main/LFM2.5-1.2B-Thinking_int4.litertlm",
             sizeBytes = 736_015_744L,
             format = ModelFormat.LITERTLM,
@@ -301,7 +301,7 @@ object ModelDownloader {
         ),
         "minicpm5-2b-litert.litertlm" to ModelInfo(
             name = "MiniCPM5 2B LiteRT",
-            description = "OpenBMB MiniCPM5 - Compacto y multilingüe",
+            descriptionRes = R.string.md_026,
             url = "$HF_MIRROR/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm",
             sizeBytes = 1_553_670_064L,
             format = ModelFormat.LITERTLM,
@@ -309,7 +309,7 @@ object ModelDownloader {
         ),
         "granite-4.0-micro-litert.litertlm" to ModelInfo(
             name = "Granite 4.0 Micro LiteRT",
-            description = "IBM Granite 4.0 - Enfocado en empresa y código",
+            descriptionRes = R.string.md_027,
             url = "$HF_MIRROR/litert-community/granite-4.0-micro/resolve/main/granite-4.0-micro_int4.litertlm",
             sizeBytes = 2_198_475_104L,
             format = ModelFormat.LITERTLM,
@@ -317,7 +317,7 @@ object ModelDownloader {
         ),
         "qwen-3-4b-litert.litertlm" to ModelInfo(
             name = "Qwen 3 4B LiteRT",
-            description = "Alibaba Qwen 3 4B - Razonamiento híbrido en LiteRT",
+            descriptionRes = R.string.md_028,
             url = "$HF_MIRROR/litert-community/Qwen3-4B/resolve/main/qwen3_4b_mixed_int4.litertlm",
             sizeBytes = 2_659_053_760L,
             format = ModelFormat.LITERTLM,
@@ -326,7 +326,7 @@ object ModelDownloader {
         ),
         "ministral-3-8b-litert.litertlm" to ModelInfo(
             name = "Ministral 3 8B LiteRT",
-            description = "Mistral AI - El LiteRT más capaz (necesita ~6 GB de RAM)",
+            descriptionRes = R.string.md_029,
             url = "$HF_MIRROR/litert-community/Ministral-3-8B-Instruct-2512/resolve/main/Ministral-3-8B-Instruct-2512_int4.litertlm",
             sizeBytes = 5_039_124_912L,
             format = ModelFormat.LITERTLM,
@@ -341,7 +341,7 @@ object ModelDownloader {
     private val EXTRA_CATALOG = mapOf(
         "mmproj-qwen2-vl-2b-f16.gguf" to ModelInfo(
             name = "mmproj Qwen2-VL 2B f16",
-            description = "Proyector de visión para Qwen2-VL 2B (llama.cpp)",
+            descriptionRes = R.string.md_030,
             url = "$HF_MIRROR/bartowski/Qwen2-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
             sizeBytes = 1_331_656_192L,
             format = ModelFormat.GGUF,
@@ -351,7 +351,7 @@ object ModelDownloader {
         ),
         "sd15-emaonly-q4_0.gguf" to ModelInfo(
             name = "Stable Diffusion 1.5 Q4_0",
-            description = "SD 1.5 pruned emaonly - el más ligero para móvil",
+            descriptionRes = R.string.md_031,
             url = "$HF_MIRROR/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
             sizeBytes = 1_566_768_416L,
             format = ModelFormat.GGUF,
@@ -361,7 +361,7 @@ object ModelDownloader {
         ),
         "sd15-emaonly-q8_0.gguf" to ModelInfo(
             name = "Stable Diffusion 1.5 Q8_0",
-            description = "SD 1.5 pruned emaonly - mas calidad que Q4, pide mas RAM",
+            descriptionRes = R.string.md_032,
             url = "$HF_MIRROR/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q8_0.gguf",
             sizeBytes = 1_763_578_176L,
             format = ModelFormat.GGUF,
@@ -371,7 +371,7 @@ object ModelDownloader {
         ),
         "sd21-q4_0.gguf" to ModelInfo(
             name = "Stable Diffusion 2.1 Q4_0",
-            description = "SD 2.1 768px - otra base clasica, un solo archivo",
+            descriptionRes = R.string.md_033,
             url = "$HF_MIRROR/second-state/stable-diffusion-2-1-GGUF/resolve/main/v2-1_768-nonema-pruned-Q4_0.gguf",
             sizeBytes = 1_699_714_336L,
             format = ModelFormat.GGUF,
@@ -381,7 +381,7 @@ object ModelDownloader {
         ),
         "realvisxl-v5-q4_0.gguf" to ModelInfo(
             name = "RealVisXL V5.0 Q4_0",
-            description = "SDXL realista - buena calidad en 1.4 GB (recomendado en movil)",
+            descriptionRes = R.string.md_034,
             url = "$HF_MIRROR/hum-ma/SDXL-models-GGUF/resolve/main/RealVisXL_V5.0-Q4_0.gguf",
             sizeBytes = 1_491_356_224L,
             format = ModelFormat.GGUF,
@@ -391,7 +391,7 @@ object ModelDownloader {
         ),
         "hyper-sd-sd15-1step.safetensors" to ModelInfo(
             name = "Hyper-SD 1-step LoRA (SD 1.5)",
-            description = "LoRA de 1 paso: imagen en 1 paso con sampler LCM/TCD · 257 MB",
+            descriptionRes = R.string.md_035,
             url = "$HF_MIRROR/rupeshs/hypersd-sd1-5-1-step-lora/resolve/main/pytorch_lora_weights.safetensors",
             sizeBytes = 269_127_096L,
             format = ModelFormat.SAFETENSORS,
@@ -401,7 +401,7 @@ object ModelDownloader {
         ),
         "sd-turbo-q8_0.gguf" to ModelInfo(
             name = "SD Turbo Q8_0 (1-4 pasos)",
-            description = "Distilado tipo fastsdcpu: imagen en 1-4 pasos, ideal en CPU",
+            descriptionRes = R.string.md_036,
             url = "$HF_MIRROR/Green-Sky/SD-Turbo-GGUF/resolve/main/sd_turbo-f16-q8_0.gguf",
             sizeBytes = 2_023_745_376L,
             format = ModelFormat.GGUF,
@@ -411,7 +411,7 @@ object ModelDownloader {
         ),
         "sdxl-lightning-2step-q4_0.gguf" to ModelInfo(
             name = "SDXL Lightning 2-step Q4_0",
-            description = "SDXL en 2 pasos - el mas rapido para experimentar",
+            descriptionRes = R.string.md_037,
             url = "$HF_MIRROR/mzwing/SDXL-Lightning-GGUF/resolve/main/sdxl_lightning_2step.q4_0.gguf",
             sizeBytes = 2_584_858_432L,
             format = ModelFormat.GGUF,
@@ -421,7 +421,7 @@ object ModelDownloader {
         ),
         "wd14-moat-onnx" to ModelInfo(
             name = "WD14 Moat Tagger (ONNX)",
-            description = "Etiquetador Danbooru WD v1.4 - necesita también la lista CSV",
+            descriptionRes = R.string.md_038,
             url = "$HF_MIRROR/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx",
             sizeBytes = 326_197_340L,
             format = ModelFormat.GGUF,
@@ -431,7 +431,7 @@ object ModelDownloader {
         ),
         "wd14-moat-tags" to ModelInfo(
             name = "WD14 Moat tags (CSV)",
-            description = "Lista de etiquetas selected_tags.csv para el tagger WD14",
+            descriptionRes = R.string.md_039,
             url = "$HF_MIRROR/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/selected_tags.csv",
             sizeBytes = 253_906L,
             format = ModelFormat.GGUF,
@@ -453,7 +453,8 @@ object ModelDownloader {
 
     data class ModelInfo(
         val name: String,
-        val description: String,
+        /** Descripción traducida: vive en los strings.xml de cada idioma. */
+        val descriptionRes: Int,
         val url: String,
         val sizeBytes: Long,
         val format: ModelFormat,

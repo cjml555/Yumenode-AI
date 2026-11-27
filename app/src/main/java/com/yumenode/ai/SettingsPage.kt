@@ -209,7 +209,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         }
         settingsBody.addView(kvSpinner, wrapWrap().apply { topMargin = dp(8) })
         settingsBody.addView(
-            host.ui.hintText(getString(R.string.s_554, KvCacheConfig.hint(KvCacheConfig.type(ctx)))),
+            host.ui.hintText(getString(R.string.s_554, getString(KvCacheConfig.hintRes(KvCacheConfig.type(ctx))))),
             matchWrap().apply { topMargin = dp(4) }
         )
 
@@ -260,7 +260,12 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         specRow(getString(R.string.s_515), caps.socLabel)
         specRow(getString(R.string.s_516), caps.cpuLabel)
         specRow("RAM", caps.ramLabel)
-        specRow(getString(R.string.s_518), caps.vulkanLabel)
+        val vkLabel = caps.vulkanLabel
+        specRow(
+            getString(R.string.s_518),
+            if (caps.vulkanLevel > 0) getString(R.string.device_vulkan_level, vkLabel, caps.vulkanLevel)
+            else vkLabel
+        )
         specRow("GLES", caps.glesVersion)
         specRow("ABI", caps.abi)
         settingsBody.addView(

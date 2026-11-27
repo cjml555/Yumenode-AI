@@ -3,6 +3,7 @@ package com.yumenode.ai
 
 import android.app.ActivityManager
 import android.content.Context
+import androidx.annotation.StringRes
 import net.ladenthin.llama.args.CacheType
 
 /**
@@ -46,12 +47,13 @@ internal object KvCacheConfig {
         else -> type.name
     }
 
-    /** Descripcion corta del ahorro de RAM, para el texto de ayuda. */
-    fun hint(type: CacheType): String = when (type) {
-        CacheType.Q8_0 -> "Q8_0 · half the RAM of F16, no visible quality loss"
-        CacheType.Q4_0 -> "Q4_0 · a quarter of F16, slight quality loss"
-        CacheType.F16 -> "F16 · not quantized, most RAM"
-        else -> ""
+    /** Descripcion corta del ahorro de RAM, como recurso traducible. */
+    @StringRes
+    fun hintRes(type: CacheType): Int = when (type) {
+        CacheType.Q8_0 -> R.string.kv_hint_q8
+        CacheType.Q4_0 -> R.string.kv_hint_q4
+        CacheType.F16 -> R.string.kv_hint_f16
+        else -> 0
     }
 
     /** Tipo configurado (por defecto según RAM del dispositivo). */

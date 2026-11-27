@@ -36,8 +36,8 @@ class KvCacheConfigTest {
     @Test
     fun everyOptionHasAHint() {
         for (type in KvCacheConfig.OPTIONS) {
-            val hint = KvCacheConfig.hint(type)
-            assertTrue("sin hint para $type", hint.isNotBlank())
+            val hintRes = KvCacheConfig.hintRes(type)
+            assertTrue("sin hint para $type", hintRes != 0)
         }
     }
 

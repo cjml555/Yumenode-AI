@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.16] - 2026-11-27
+
+### Added
+- **Chino simplificado completo** (`values-zh`): las 96 cadenas que faltaban están traducidas;
+  ahora los tres idiomas tienen la misma paridad de claves (621 cada uno).
+- **Descripciones del catálogo traducidas**: los 39 textos de los modelos vivían en español
+  dentro de `ModelDownloader.kt`; pasan a recursos (`md_001`…`md_039`) con versión en inglés y
+  en chino, así que el listado deja de mezclar idiomas.
+- Traducidas las ayudas de cuantización del caché KV y la etiqueta de nivel de Vulkan
+  (`kv_hint_*`, `device_vulkan_level`), que estaban fijas en el código.
+
+### Changed
+- `KvCacheConfig.hint()` se sustituye por `hintRes()`, que devuelve el id del recurso: la UI
+  traduce y el test deja de depender de un `Context`.
+
+### Verified
+- 375 tests en verde; en el dispositivo, con locale `zh-CN`, `es-MX` y por defecto, las
+  pantallas de descargas y ajustes muestran el idioma correcto sin fugas de texto.
+
 ## [1.4.15] - 2026-11-27
 
 ### Fixed

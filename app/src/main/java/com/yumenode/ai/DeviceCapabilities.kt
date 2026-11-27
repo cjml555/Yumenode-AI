@@ -48,7 +48,7 @@ internal data class DeviceCapabilities(
         get() = if (maxFreqMhz > 0) "$bigCores/$coreCount · $maxFreqMhz MHz" else "$bigCores/$coreCount"
 
     val vulkanLabel: String
-        get() = vulkanVersion?.let { v -> if (vulkanLevel > 0) "$v · nivel $vulkanLevel" else v } ?: "—"
+        get() = vulkanVersion?.let { v -> v } ?: "—"
 }
 
 internal object DeviceProbe {
