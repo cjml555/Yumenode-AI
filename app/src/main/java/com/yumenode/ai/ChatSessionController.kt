@@ -113,6 +113,9 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         sessions += s
         current = s
         restoreSession()
+        // Un chat nuevo empieza en blanco: el borrador (o el texto compartido)
+        // que quedó en la caja de entrada pertenece a la conversación anterior.
+        if (inputEdit.text?.isNotEmpty() == true) inputEdit.setText("")
         sessionManager.save()
         toast(getString(R.string.s_095))
     }
