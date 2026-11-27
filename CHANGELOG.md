@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-11-27
+
 ### Added
 - **Búsqueda en el historial de chats**: campo de búsqueda en el panel lateral que filtra por
   título y por el texto de cualquier turno (pregunta o respuesta), con contador de resultados
