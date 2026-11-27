@@ -3,6 +3,9 @@ package com.yumenode.ai
 
 import android.app.Application
 import androidx.work.Configuration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Aplicación: solo para dar a WorkManager una configuración bajo demanda.

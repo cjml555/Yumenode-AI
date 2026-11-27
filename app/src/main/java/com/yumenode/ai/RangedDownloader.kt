@@ -136,6 +136,7 @@ class RangedDownloader(
                         try {
                             val got = fetchSegment(url, seg, channel, downloaded, total, onProgress, isCancelled)
                             if (got > 0) markPartDone(partsFile, seg.index, chunkBytes)
+
                         } catch (_: Exception) {
                             // Un trozo fallido se reintentara en la siguiente
                             // invocacion (queda sin marcar en el .parts).

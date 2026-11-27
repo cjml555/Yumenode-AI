@@ -10,8 +10,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,10 +38,25 @@ object ModelDownloads {
     private val _finished = MutableStateFlow<Map<String, String>>(emptyMap())
     val finished: StateFlow<Map<String, String>> = _finished
 
+    /**
+     * Borra del historial los trabajos ya terminados.
+     *
+     * WorkManager guarda cada WorkSpec (con su último progreso) y los conserva
+     * un tiempo; con muchas descargas el arranque se vuelve lento porque su
+     * inicialización abre una base de datos grande. Medido: con la base limpia
+     * abrir WorkManager cuesta 0 ms; acumulada, bloqueaba la UI al arrancar.
+     */
+    private fun pruneSoon(context: Context) {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { workManager(context).pruneWork() }
+        }
+    }
+
     internal fun finish(modelKey: String, status: String) {
         _finished.value = _finished.value + (modelKey to status)
         _progress.value = _progress.value - modelKey
         forget(context = null, modelKey)
+        appContext?.let { pruneSoon(it) }
     }
 
     /** Descargas pendientes que sobreviven al proceso. */
@@ -112,6 +130,13 @@ object ModelDownloads {
     ) {
         appContext = context.applicationContext
         remember(context, modelKey)
+        // Todo el encolado en IO: `getInstance()` inicializa WorkManager y no
+        // debe correr en el hilo de la UI (ANR en el primer uso tras instalar).
+        val app = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch { enqueueNow(app, modelKey, modelName, replace) }
+    }
+
+    private fun enqueueNow(app: Context, modelKey: String, modelName: String, replace: Boolean) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
             .setInputData(workDataOf(
                 ModelDownloadWorker.KEY_MODEL to modelKey,
@@ -133,7 +158,7 @@ object ModelDownloads {
             .addTag(tagFor(modelKey))
             .build()
 
-        workManager(context).enqueueUniqueWork(
+        workManager(app).enqueueUniqueWork(
             uniqueName(modelKey),
             if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             request,

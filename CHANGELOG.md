@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **ANR al pulsar «Descargar modelo»**: el diálogo de permiso de notificaciones se abría
+  justo al encolar la descarga y el cambio de foco se quedaba sin atender 10 s (ANR por
+  *Input dispatching*, `FocusEvent(hasFocus=true)`). El permiso ya no se pide desde ese
+  botón; sin él la descarga funciona igual, solo no se ve el aviso.
+- **ANR al abrir pestañas**: WorkManager se inicializaba al arrancar y bloqueaba la UI
+  (auto-init) o, si se hacía desde un hilo de fondo, provocaba interbloqueo. Ahora se
+  inicializa en el hilo principal **tras el primer frame** (coste medido: 0 ms) y el
+  encolado no toca WorkManager desde la UI.
+- El historial de trabajos de WorkManager se poda al terminar cada descarga: acumulado,
+  su base de datos hacía lento el arranque.
+
+### Known issues
+- Con una descarga activa, cambiar a la pestaña **Chat** puede congelar la UI ~10 s en el
+  Edge 50 Fusion: el hilo principal queda esperando un cerrojo (`futex`) que no se ha
+  podido identificar (Android 16 no entrega la traza sin root). No ocurre sin descarga.
+  Siguiente paso: traza de Perfetto con `-a com.yumenode.ai`.
+
 ## [1.4.14] - 2026-11-27
 
 ## [1.4.13] - 2026-11-27

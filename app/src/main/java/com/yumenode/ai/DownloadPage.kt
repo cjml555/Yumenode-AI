@@ -61,6 +61,7 @@ class DownloadPage(
     )
 
     fun build(): View = with(ctx) {
+        Trace.tlog("DownloadPage.build inicio")
         downloadJob?.cancel()
         buttonsByKey.clear()
         val sv = ScrollView(ctx).apply {
@@ -97,6 +98,7 @@ class DownloadPage(
         scrollView = sv
         container = list
         refresh()
+        Trace.tlog("DownloadPage.build fin")
         sv
     }
 
@@ -106,10 +108,15 @@ class DownloadPage(
     }
 
     private fun renderList(container: LinearLayout) = with(ctx) {
+        Trace.tlog("renderList inicio ${selectedKind}")
 
         container.removeAllViews()
         val models = ModelDownloader.getAvailableModels().filter { it.kind == selectedKind }
+        Trace.tlog("renderList ${models.size} modelos")
+        var idx = 0
         for (info in models) {
+            if (idx % 5 == 0) Trace.tlog("renderList item $idx ${info.name.take(18)}")
+            idx++
             val already = ModelDownloader.isModelDownloaded(ctx, info.name)
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -189,15 +196,11 @@ class DownloadPage(
                     background = rounded(C_PRIMARY, 8)
                     setPadding(dp(16), dp(8), dp(16), dp(8))
                     setOnClickListener {
-                        // La notificación de progreso necesita POST_NOTIFICATIONS en 13+
-                        if (Build.VERSION.SDK_INT >= 33 &&
-                            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-                            PackageManager.PERMISSION_GRANTED
-                        ) {
-                            requestPermissions(
-                                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF
-                            )
-                        }
+                        // El permiso de notificaciones se pide en Ajustes/API, no
+                        // aquí: el diálogo roba el foco justo cuando se encola la
+                        // descarga y el cambio de foco se quedaba sin atender
+                        // (ANR por Input dispatching). Sin permiso la descarga
+                        // funciona igual; solo no se ve el aviso.
                         val btnLabel = btn.text
                         btn.isEnabled = false
                         btn.alpha = 0.6f
@@ -276,6 +279,7 @@ class DownloadPage(
             itemWrap.addView(row, matchWrap())
             container.addView(itemWrap, matchWrap().apply { topMargin = dp(6) })
         }
+        Trace.tlog("renderList fin ${models.size}")
         if (models.isEmpty()) {
             container.addView(makeHint(getString(R.string.s_513)), matchWrap().apply { topMargin = dp(16) })
         }

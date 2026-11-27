@@ -760,6 +760,11 @@ object ModelDownloader {
                 // Hilos de descarga en prioridad de fondo: la UI manda.
                 onThreadStart = { android.os.Process.setThreadPriority(
                     android.os.Process.THREAD_PRIORITY_BACKGROUND) },
+                // Dos conexiones y una pausa mínima por trozo: con 4 hilos y sin
+                // respiro, este equipo perdía la respuesta a toques durante la
+                // descarga (ANR por Input dispatching). Coste medido: ~3 % menos
+                // de velocidad, y la UI sigue viva.
+                MAX_PARALLEL = 2,
             )
             val result = downloader.download(
                 url = info.url,

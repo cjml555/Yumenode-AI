@@ -631,6 +631,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private val drawerWidthDp = 280
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Trace.tlog("onCreate inicio")
         // Install the crash hook earliest: exceptions during theme parsing / UI build also get logged (a crash inside buildUi would otherwise leave no trace)
         crashHandler.install()
         // Trial GPU colgado = el intento anterior con Vulkan mato el proceso:
@@ -691,7 +692,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
         // WorkManager se inicializa aquí, en IO, para que el primer «Descargar»
         // no pague la apertura de su base de datos en el hilo principal.
-        warmUpDownloads()
+        // Diferido al primer frame: tocar WorkManager en pleno arranque puede
+        // competir con el hilo principal; aquí ya está pintada la UI.
+        window?.decorView?.postDelayed({ warmUpDownloads() }, 1500)
+        Trace.tlog("onCreate fin")
     }
 
     /**
@@ -1309,6 +1313,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     }
 
     override fun switchTab(index: Int) {
+        Trace.tlog("switchTab $index inicio")
         currentTab = index
         tabChat.visibility = if (index == 0) View.VISIBLE else View.GONE
         tabModels.visibility = if (index == 1) View.VISIBLE else View.GONE
@@ -1342,13 +1347,14 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
 
     /** WorkManager se inicializa aquí, en IO, para que «Descargar» no congele la UI. */
     private fun warmUpDownloads() {
+        // En el hilo principal a propósito: inicializar WorkManager desde un hilo
+        // de fondo mientras el principal trabaja produce interbloqueo (medido:
+        // la UI se quedaba congelada para siempre justo después).
+        val t0 = android.os.SystemClock.uptimeMillis()
+        runCatching { ModelDownloads.warmUp(this) }
+        Trace.tlog("warmUp main ${android.os.SystemClock.uptimeMillis() - t0} ms")
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching {
-                ModelDownloads.warmUp(this@MainActivity)
-                // Lo que quedó a medias se relanza al abrir (WorkManager puede
-                // tardar minutos en reprogramarlo por su cuenta).
-                ModelDownloads.resumePending(this@MainActivity)
-            }
+            runCatching { ModelDownloads.resumePending(this@MainActivity) }
         }
     }
 
