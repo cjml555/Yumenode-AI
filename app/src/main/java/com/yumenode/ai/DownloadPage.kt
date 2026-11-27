@@ -13,6 +13,12 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.work.WorkInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Pestaña «Descargar modelos libres».
@@ -36,6 +42,12 @@ class DownloadPage(
     override val palette: YumenodeTheme get() = pal
 
     private var scrollView: ScrollView? = null
+    /** Job que sigue el estado de la descarga en WorkManager (se cancela al reconstruir). */
+    private var downloadJob: Job? = null
+    /** Scope de los observadores de reenganche (se cancela al reconstruir). */
+    private val reattach = CoroutineScope(Dispatchers.Main + Job())
+    /** Botón de descarga por modelo, para marcar los que ya están bajando. */
+    private val buttonsByKey = HashMap<String, TextView>()
     private var container: LinearLayout? = null
 
     /** Pestaña activa del downloader. */
@@ -49,6 +61,8 @@ class DownloadPage(
     )
 
     fun build(): View = with(ctx) {
+        downloadJob?.cancel()
+        buttonsByKey.clear()
         val sv = ScrollView(ctx).apply {
             clipToPadding = false
             setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -216,71 +230,67 @@ class DownloadPage(
                             scrollView?.smoothScrollTo(0, itemWrap.bottom)
                         }
 
-                        val progressCallback: ModelDownloader.ProgressCallback = { progInfo ->
-                            runOnUiThread {
-                                val pct = (progInfo.progress * 100).toInt().coerceIn(0, 100)
-                                pb.isIndeterminate = false
-                                pb.progress = pct
-                                if (progInfo.progress >= 1.0) {
-                                    pbRow.visibility = View.GONE
-                                } else {
-                                    val speedStr = Formatters.speed(progInfo.speedBytesPerSec)
-                                    val etaStr = if (progInfo.etaSeconds != null && progInfo.etaSeconds > 0) {
-                                        " · ETA: ${Formatters.eta(progInfo.etaSeconds)}"
-                                    } else ""
-                                    pbText.text = "$pct% · $speedStr$etaStr"
+                        // La descarga va a WorkManager: sobrevive a cerrar la app
+                        // o a que Android mate el proceso (se reanuda desde el .parts).
+                        toast("Descargando ${info.name}...")
+                        ModelDownloads.enqueue(ctx, info.name, info.name)
+                        downloadJob?.cancel()
+                        // Progreso y resultado llegan por flujos EN MEMORIA: los
+                        // Flow de WorkManager consultan su base de datos y con la
+                        // descarga activa dejaban la UI sin hilo principal (ANR).
+                        downloadJob = CoroutineScope(Dispatchers.Main).launch {
+                            launch {
+                                ModelDownloads.progress.collect { map ->
+                                    val pct = map[info.name] ?: return@collect
+                                    pb.isIndeterminate = false
+                                    pb.progress = pct
+                                    pbText.text = "$pct%"
                                 }
+                            }
+                            ModelDownloads.finished.collect { map ->
+                                val st = map[info.name] ?: return@collect
+                                pbRow.visibility = View.GONE
+                                btn.isEnabled = true
+                                btn.alpha = 1f
+                                btn.text = btnLabel
+                                when {
+                                    st == "ok" -> {
+                                        toast("Descarga completada: ${info.name}")
+                                        refresh()
+                                        // El modelo recién bajado debe aparecer ya
+                                        // seleccionable en la pestaña Models/API.
+                                        onModelsChanged()
+                                    }
+                                    st == "cancelada" -> toast("Descarga cancelada")
+                                    else -> toast("Error: ${st.removePrefix("error:")}")
+                                }
+                                downloadJob?.cancel()
                             }
                         }
-                        toast("Descargando ${info.name}...")
-                        ModelDownloader.downloadModel(
-                            info.name,
-                            ctx,
-                            progressCallback,
-                            onComplete = { result ->
-                                runOnUiThread {
-                                    when (result) {
-                                        is ModelDownloader.DownloadResult.Success -> {
-                                            toast("Descarga completada: ${info.name}")
-                                            refresh()
-                                            // El modelo recién bajado debe aparecer ya
-                                            // seleccionable en la pestaña Models/API.
-                                            onModelsChanged()
-                                        }
-                                        is ModelDownloader.DownloadResult.Failure -> {
-                                            toast("Error: ${result.error}")
-                                            pbRow.visibility = View.GONE
-                                            btn.isEnabled = true
-                                            btn.alpha = 1f
-                                            btn.text = btnLabel
-                                        }
-                                        is ModelDownloader.DownloadResult.Cancelled -> {
-                                            toast("Descarga cancelada")
-                                            pbRow.visibility = View.GONE
-                                            btn.isEnabled = true
-                                            btn.alpha = 1f
-                                            btn.text = btnLabel
-                                        }
-                                        is ModelDownloader.DownloadResult.NetworkError -> {
-                                            toast("Sin red: ${result.message}")
-                                            pbRow.visibility = View.GONE
-                                            btn.isEnabled = true
-                                            btn.alpha = 1f
-                                            btn.text = btnLabel
-                                        }
-                                    }
-                                }
-                            }
-                        )
                     }
                 }
             }
             row.addView(actionBtn, wrapWrap().apply { leftMargin = dp(8) })
+            // Se guarda para marcar las descargas activas en una sola pasada.
+            buttonsByKey[info.name] = actionBtn
             itemWrap.addView(row, matchWrap())
             container.addView(itemWrap, matchWrap().apply { topMargin = dp(6) })
         }
         if (models.isEmpty()) {
             container.addView(makeHint(getString(R.string.s_513)), matchWrap().apply { topMargin = dp(16) })
+        }
+
+        // Descargas ya en curso: una sola consulta a WorkManager, fuera del hilo
+        // principal (consultarlo por tarjeta congelaba la UI).
+        reattach.launch {
+            val active = withContext(Dispatchers.IO) { ModelDownloads.activeKeys(ctx) }
+            for (key in active) {
+                buttonsByKey[key]?.let { b ->
+                    b.isEnabled = false
+                    b.alpha = 0.6f
+                    b.text = "Descargando…"
+                }
+            }
         }
         }
 }

@@ -64,3 +64,8 @@
 -keepattributes Signature
 -keepattributes Exceptions
 -keepattributes InnerClasses
+
+# WorkManager instancia los Worker por nombre de clase (reflexión): R8 no debe
+# renombrarlos ni eliminarlos, o las descargas fallarían solo en release.
+-keep class * extends androidx.work.ListenableWorker { *; }
+-keep class com.yumenode.ai.ModelDownloadWorker { *; }

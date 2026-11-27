@@ -689,6 +689,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             gpuCrashNotice = false
             toast(getString(R.string.s_566))
         }
+        // WorkManager se inicializa aquí, en IO, para que el primer «Descargar»
+        // no pague la apertura de su base de datos en el hilo principal.
+        warmUpDownloads()
     }
 
     /**
@@ -1336,6 +1339,18 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
     private var drawerQuery: String = ""
     /** Contenedor solo de la lista (el buscador no se reconstruye al filtrar). */
     private lateinit var drawerList: LinearLayout
+
+    /** WorkManager se inicializa aquí, en IO, para que «Descargar» no congele la UI. */
+    private fun warmUpDownloads() {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                ModelDownloads.warmUp(this@MainActivity)
+                // Lo que quedó a medias se relanza al abrir (WorkManager puede
+                // tardar minutos en reprogramarlo por su cuenta).
+                ModelDownloads.resumePending(this@MainActivity)
+            }
+        }
+    }
 
     override fun buildDrawer(rootFrame: FrameLayout) {
         drawerMask = View(this).apply {

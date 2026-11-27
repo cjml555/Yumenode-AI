@@ -14,8 +14,8 @@ plugins {
 //   con la versión del fichero).
 // - En local, sin properties, valen los defaults de aquí, así que
 //   `./gradlew assembleFreeDebug` sigue funcionando sin argumentos.
-val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("1.4.13")
-val appVersionCode: Int = providers.gradleProperty("appVersionCode").map(String::toInt).getOrElse(10413)
+val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("1.4.12")
+val appVersionCode: Int = providers.gradleProperty("appVersionCode").map(String::toInt).getOrElse(10412)
 
 // El sabor premium es otra aplicación en Play (applicationId propio); el
 // desplazamiento 10xxx / 20xxx se mantiene para que las dos trazas de
@@ -161,6 +161,9 @@ dependencies {
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
     implementation("androidx.viewpager:viewpager:1.1.0")
+    // Descargas de modelos en segundo plano: WorkManager relanza el trabajo si
+    // Android mata el proceso y el downloader reanuda desde el `.parts`.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     // 打标（Tagger）：ONNX Runtime，运行用户导入的 WD14 类 .onnx 模型（arm64-v8a）
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // PDF 文本抽取（对话发送 PDF）：Tom Roush 的 PDFBox Android 移植

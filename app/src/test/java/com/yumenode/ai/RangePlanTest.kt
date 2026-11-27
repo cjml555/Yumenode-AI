@@ -194,4 +194,30 @@ class RangePlanTest {
         // aceptase, los tramos se escribirian encima unos de otros.
         assertFalse(RangePlan.acceptsRanges("none, chunked"))
     }
+
+    @Test
+    fun `chunkCount trocea fino los ficheros grandes`() {
+        // 1,7 GB en trozos de 16 MB -> 102 trozos (antes: 4 tramos gigantes)
+        assertEquals(102, RangePlan.chunkCount(1_708_582_752L))
+        // 4 GB
+        assertEquals(256, RangePlan.chunkCount(4L * 1024 * 1024 * 1024))
+    }
+
+    @Test
+    fun `chunkCount un solo trozo para ficheros pequenos`() {
+        assertEquals(1, RangePlan.chunkCount(1024L))
+        assertEquals(1, RangePlan.chunkCount(0L))
+        assertEquals(1, RangePlan.chunkCount(16L * 1024 * 1024))
+    }
+
+    @Test
+    fun `chunkCount acepta un tamano de trozo propio`() {
+        assertEquals(4, RangePlan.chunkCount(4_000L, chunkBytes = 1_000L))
+    }
+
+    @Test
+    fun `partsHeader identifica el troceado`() {
+        assertEquals("#chunk=16777216", RangePlan.partsHeader())
+        assertEquals("#chunk=1000", RangePlan.partsHeader(1_000L))
+    }
 }

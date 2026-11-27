@@ -614,23 +614,38 @@ object ModelDownloader {
     /** Indica si hay una descarga en progreso */
     fun isDownloading(): Boolean = activeDownload.get()?.isActive == true
 
-    /** Descarga un modelo con reintentos, progreso, cancelación y verificación */
+    /** Descarga un modelo con reintentos, progreso, cancelación y verificación. */
     fun downloadModel(
         modelKey: String,
         context: Context,
         onProgress: ProgressCallback,
         onComplete: CompletionCallback
     ) {
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            onComplete(downloadBlocking(modelKey, context, onProgress))
+        }
+        activeDownload.set(job)
+    }
+
+    /**
+     * Igual que [downloadModel] pero suspendida y devolviendo el resultado.
+     *
+     * Es la que usa [ModelDownloadWorker]: al no depender de un scope de la app,
+     * WorkManager puede relanzarla si Android mata el proceso y la descarga
+     * continúa desde el `.parts` en vez de empezar de cero.
+     */
+    suspend fun downloadBlocking(
+        modelKey: String,
+        context: Context,
+        onProgress: ProgressCallback,
+    ): DownloadResult {
         // Verificar red antes de empezar
         if (!isNetworkAvailable(context)) {
-            onComplete(DownloadResult.NetworkError("Sin conexión a internet"))
-            return
+            return DownloadResult.NetworkError("Sin conexión a internet")
         }
 
-        val info = resolveInfo(modelKey) ?: run {
-            onComplete(DownloadResult.Failure("Modelo no encontrado en catálogo: $modelKey"))
-            return
-        }
+        val info = resolveInfo(modelKey)
+            ?: return DownloadResult.Failure("Modelo no encontrado en catálogo: $modelKey")
 
         cancelled.set(false)
         val modelsDir = info.baseDir(context)
@@ -646,7 +661,7 @@ object ModelDownloader {
             Log.i(TAG, "Modelo ya existe: ${modelFile.absolutePath}")
             if (verifyChecksum(modelFile, info.sha256)) {
                 DownloadNotifier.complete(context, info.name)
-                onComplete(DownloadResult.Success(modelFile.absolutePath, modelKey))
+                return DownloadResult.Success(modelFile.absolutePath, modelKey)
             } else {
                 modelFile.delete()
                 // Continuar con descarga
@@ -664,9 +679,8 @@ object ModelDownloader {
             DownloadNotifier.progress(context, info.name, pct, "$pct% · $speed$eta")
         }
 
-        // Iniciar descarga con reintentos
-        val job = CoroutineScope(Dispatchers.IO).launch {
-            var attempt = 0
+        // Reintentos en línea (el worker de WorkManager manda el ciclo de vida)
+        var attempt = 0
             var lastError: String? = null
 
             while (attempt < MAX_RETRIES && !cancelled.get()) {
@@ -679,8 +693,7 @@ object ModelDownloader {
                         // Verificar checksum si está disponible
                         if (verifyChecksum(modelFile, info.sha256)) {
                             DownloadNotifier.complete(context, info.name)
-                            onComplete(result)
-                            return@launch
+                            return result
                         } else {
                             lastError = "Checksum inválido"
                             modelFile.delete()
@@ -689,8 +702,7 @@ object ModelDownloader {
                             partialMarkerFor(modelFile).delete()
                         }
                     } else if (result is DownloadResult.Cancelled) {
-                        onComplete(result)
-                        return@launch
+                        return result
                     } else {
                         lastError = (result as DownloadResult.Failure).error
                     }
@@ -715,15 +727,11 @@ object ModelDownloader {
             // Todos los intentos fallaron
             if (cancelled.get()) {
                 DownloadNotifier.cancel(context)
-                onComplete(DownloadResult.Cancelled)
-            } else {
-                val err = lastError ?: "Error desconocido tras $MAX_RETRIES intentos"
-                DownloadNotifier.failed(context, info.name, err)
-                onComplete(DownloadResult.Failure(err))
+                return DownloadResult.Cancelled
             }
-        }
-
-        activeDownload.set(job)
+            val err = lastError ?: "Error desconocido tras $MAX_RETRIES intentos"
+            DownloadNotifier.failed(context, info.name, err)
+        return DownloadResult.Failure(err)
     }
 
     /** Descarga un archivo único con progreso y soporte de cancelación */
@@ -749,6 +757,9 @@ object ModelDownloader {
                 bufferSize = CHUNK_SIZE,
                 connectTimeoutMs = 30000,
                 readTimeoutMs = 60000,
+                // Hilos de descarga en prioridad de fondo: la UI manda.
+                onThreadStart = { android.os.Process.setThreadPriority(
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND) },
             )
             val result = downloader.download(
                 url = info.url,
