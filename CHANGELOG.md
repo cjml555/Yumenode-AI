@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-11-26
+
 ### Added
 - **Tool calling en la API OpenAI-compatible** (`tools`, `tool_choice`): el modelo local no
   habla el protocolo de herramientas de ningún proveedor, así que la app describe cada
