@@ -44,6 +44,9 @@ object ChatCore {
 
     /** Currently loaded model name (API's /v1/models uses it as id) */
     @Volatile var modelName: String? = null
+
+    /** Runtime + backend realmente usados ("llama.cpp CPU", "LiteRT-LM GPU", ...). */
+    @Volatile var backendLabel: String? = null
         private set
 
     /** Whether model supports image input (currently API text-only, kept for future multimodal interface) */
@@ -71,20 +74,33 @@ object ChatCore {
     private class Cached(val prior: List<Msg>, val sys: String, val conv: Conversation)
     private var cache: Cached? = null
 
-    fun attachLiteRt(eng: Engine, name: String, vision: Boolean) {
+    fun attachLiteRt(eng: Engine, name: String, vision: Boolean, backend: String = "LiteRT-LM") {
         clearCache()
         engine = eng
         llama = null
         modelName = name
+        backendLabel = backend
         visionOk = vision
     }
 
-    fun attachGguf(model: LlamaModel, name: String, vision: Boolean) {
+    fun attachGguf(model: LlamaModel, name: String, vision: Boolean, backend: String = "llama.cpp") {
         clearCache()
         llama = model
         engine = null
         modelName = name
+        backendLabel = backend
         visionOk = vision
+    }
+
+    /**
+     * Etiqueta breve para la nota de rendimiento del chat:
+     * "llama.cpp CPU · qwen2.5-0.5b-instruct-q4_k_m.gguf".
+     */
+    fun perfMeta(): String? {
+        val m = modelName ?: return null
+        val b = backendLabel ?: if (llama != null) "llama.cpp" else "LiteRT-LM"
+        val short = if (m.length > 28) m.take(27) + "…" else m
+        return "$b · $short"
     }
 
     /** Model unloaded (user unloaded in UI, or process exiting) — only drops references, does not close
@@ -94,6 +110,7 @@ object ChatCore {
         engine = null
         llama = null
         modelName = null
+        backendLabel = null
         visionOk = false
         gpuPriority = false
     }

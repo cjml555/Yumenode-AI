@@ -511,4 +511,6 @@
     <string name="s_564">关</string>
     <string name="s_565">开</string>
     <string name="s_566">实验 GPU 已在一次意外关闭后自动关闭。</string>
+    <string name="s_share_text">来自其他应用的文本</string>
+    <string name="s_share_image">来自其他应用的图片</string>
 </resources>

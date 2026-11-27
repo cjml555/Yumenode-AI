@@ -882,6 +882,42 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
             chatPrefs().edit().remove("restoreTab").apply()
             switchTab(restoreTab)
         }
+        handleShareIntent(intent)
+    }
+
+    /**
+     * "Compartir con Yumenode AI" desde otras apps: el texto cae en el campo de
+     * entrada y las imágenes se añaden como adjunto pendiente. Sin esto la app
+     * solo podía enviar, nunca recibir.
+     */
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        val stream: Uri? = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (stream != null) {
+            runCatching {
+                contentResolver.openInputStream(stream).use { input ->
+                    BitmapFactory.decodeStream(input)
+                }
+            }.getOrNull()?.let { bmp ->
+                val jpeg = java.io.ByteArrayOutputStream().use { out ->
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                    out.toByteArray()
+                }
+                attachmentHandler.addPendingImage(bmp, jpeg)
+                toast(getString(R.string.s_share_image))
+            }
+        } else if (!text.isNullOrBlank()) {
+            val current = inputEdit.text?.toString().orEmpty()
+            inputEdit.setText(if (current.isBlank()) text else "$current\n$text")
+            toast(getString(R.string.s_share_text))
+        }
+        switchTab(0)
     }
 
     /** Chat page: message list + jump-to-bottom button + smart auto-follow scroll. */

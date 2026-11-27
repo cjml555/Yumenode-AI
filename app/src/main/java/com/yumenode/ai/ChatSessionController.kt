@@ -421,7 +421,15 @@ class ChatSessionController(private val host: ChatSessionHost) : ThemeAliases {
         if (busy) { toast(getString(R.string.s_133)); return }
         val turn = QaTurn(prompt)
         current.turns += turn
-        if (current.title == getString(R.string.s_109)) current.title = prompt.take(18)
+        if (ChatSendLogic.isPlaceholderTitle(current.title, getString(R.string.s_109))) {
+            current.title = ChatSendLogic.computeSeedTitle(
+                text = prompt,
+                firstFileName = null,
+                defaultTitle = current.title,
+                isPlaceholderTitle = true,
+            )
+            refreshDrawer()
+        }
 
         inputEdit.setText("")
         addUserBubble(prompt)

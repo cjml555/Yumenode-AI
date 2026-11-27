@@ -619,4 +619,6 @@
     <string name="s_586">Forward requests to peer devices in your LAN to share the model across phones</string>
     <string name="s_587">Edit cluster peers</string>
     <string name="s_588">Peer URLs (one per line, http://IP:port)</string>
-    </resources>
+        <string name="s_share_text">Text received from another app</string>
+    <string name="s_share_image">Image attached from another app</string>
+</resources>
