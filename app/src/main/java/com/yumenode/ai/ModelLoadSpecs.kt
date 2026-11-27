@@ -4,6 +4,7 @@ package com.yumenode.ai
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EngineConfig
 import net.ladenthin.llama.args.CacheType
+import net.ladenthin.llama.args.FlashAttn
 import net.ladenthin.llama.parameters.ModelParameters
 import java.io.File
 
@@ -49,7 +50,8 @@ internal object ModelLoadSpecs {
             .setGpuLayers(gpuLayers)
             // FlashAttention acelera prefill y decode; el pipeline de draw ya
             // lo usa con ganancia medida de ~28% por paso.
-            .enableFlashAttn()
+            // API 6.0.0: setFlashAttn(FlashAttn.ON) — antes era enableFlashAttn().
+            .setFlashAttn(FlashAttn.ON)
             // Cuantizar el cache K/V: en F16 ocupa el doble de RAM que en
             // Q8_0 y no se nota en la calidad. Con contexto largo (32k) la
             // diferencia es de gigas: es lo que permite que un modelo grande

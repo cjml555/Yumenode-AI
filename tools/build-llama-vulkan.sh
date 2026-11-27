@@ -121,7 +121,12 @@ echo "backend vulkan: $(nm -D "$OUT/libjllama.so" | grep -ciE 'ggml_vk|ggml_back
 readelf -d "$OUT/libjllama.so" | grep NEEDED
 
 # ── Empaquetar el AAR en local-maven/ ──
-# La plantilla (classes.jar, AndroidManifest, R.txt, proguard) es la del AAR
+# ATENCIÓN: la plantilla (classes.jar) TIENE que ser de la MISMA versión que el
+# .so. En 6.0.0 se usó la plantilla de 5.1.0 y el JNI_OnLoad del .so abortaba
+# al no encontrar net.ladenthin.llama.exception.InvalidRequestException: la app
+# moría al cargar cualquier GGUF (v1.4.4/v1.4.5). Si vuelves a empaquetar,
+# arranca de local-maven/net/ladenthin/llama-android/<VER>/ con la versión
+# equivalente, no de una plantilla vieja.
 # que ya trae este pipeline en el historial (b26ce0b, versión 5.1.0); solo se
 # sustituye la libreria nativa por la recien compilada. Si la plantilla no
 # existe, el script falla: no se inventa un AAR.

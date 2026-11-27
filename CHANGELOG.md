@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Chat GGUF roto en v1.4.4 y v1.4.5**: el AAR local `llama-android-vulkan:6.0.0`
+  empaquetaba el `classes.jar` de **5.1.0** junto al `libjllama.so` de **6.0.0**
+  (`tools/build-llama-vulkan.sh` usaba `TEMPLATE_VER="5.1.0"` como plantilla). El
+  `JNI_OnLoad` del `.so` busca `net.ladenthin.llama.exception.InvalidRequestException`,
+  que no existía en esas clases: la app abortaba con SIGABRT al cargar cualquier `.gguf`
+  (tombstone verificado en el Edge 50 Fusion). Ahora se usa el AAR oficial
+  `net.ladenthin:llama-android:6.0.0` (CPU) y el código usa su API
+  (`setFlashAttn(FlashAttn.ON)` en vez de `enableFlashAttn()`).
+  Verificado en dispositivo: modelo cargado, `/health`, `/v1/chat/completions` normal y
+  `stream:true` respondiendo con tokens reales.
+
+### Added
+- `-PqaAppIdSuffix=.qa` instala una variante `com.yumenode.ai.qa` en paralelo, sin
+  desinstalar la app real ni perder sus modelos y chats (útil para QA en dispositivo).
+
+### Known issues
+- El AAR propio con Vulkan no es ABI-compatible con la API Java 6.0.0 (SIGSEGV en
+  `jllama_model_load` con el `.so` actual). Para recuperar GPU en chat hay que
+  recompilar `.so` **y** `classes.jar` desde el mismo tag de java-llama.cpp.
+  Mientras tanto el chat GGUF corre en CPU con el AAR oficial.
+
 ## [1.4.5] - 2026-11-26
 
 ### Fixed
