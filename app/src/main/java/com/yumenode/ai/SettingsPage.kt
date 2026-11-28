@@ -688,7 +688,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 cm.setPrimaryClip(ClipData.newPlainText("api", base))
                 host.toast(host.activity.getString(R.string.copied_value, base))
             }
-            .setNeutralButton("Share") { _, _ ->
+            .setNeutralButton(R.string.s_503) { _, _ ->
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(android.content.Intent.EXTRA_TEXT, body)
@@ -718,7 +718,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         android.app.AlertDialog.Builder(host.activity)
             .setTitle(R.string.s_587)
             .setView(layout)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.s_572) { _, _ ->
                 val urls = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                 prefs.edit().putString("peers", urls.joinToString("\n")).apply()
                 ClusterRouter.reload(host.activity)

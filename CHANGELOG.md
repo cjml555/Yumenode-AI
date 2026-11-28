@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   analítica (`export_*`, `cloud_sync_*`, `analytics_*`), al diálogo de la API (`api_*`,
   `copy_url`, `copied_value`) y a los avisos de prompts guardados (`saved_value`, `deleted_value`).
 - El crédito del fork deja de estar en español fijo en `SettingsPage.kt`.
+- Botones de diálogo que quedaban en un solo idioma: «Share» y «Save» en el diálogo de la
+  API y de prompts, y «Eliminar»/«Cancelar» en el de la galería, pasan a recursos.
 
 ### Added
 - `tools/find-hardcoded-ui-text.py`: barre `app/src/main/java` y lista los literales con pinta de

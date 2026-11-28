@@ -173,12 +173,12 @@ class VisionManager(
     private fun confirmDeleteMmproj(f: File) {
         android.app.AlertDialog.Builder(ctx)
             .setMessage("¿Eliminar ${f.name}?")
-            .setPositiveButton("Eliminar") { _, _ ->
+            .setPositiveButton(R.string.s_504) { _, _ ->
                 runCatching { f.delete() }
                 if (mmprojPath == f.absolutePath) mmprojPath = null
                 refreshMmprojUi()
             }
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton(R.string.s_066, null)
             .show()
     }
 
