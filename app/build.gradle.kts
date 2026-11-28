@@ -14,8 +14,8 @@ plugins {
 //   con la versión del fichero).
 // - En local, sin properties, valen los defaults de aquí, así que
 //   `./gradlew assembleFreeDebug` sigue funcionando sin argumentos.
-val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("1.4.16")
-val appVersionCode: Int = providers.gradleProperty("appVersionCode").map(String::toInt).getOrElse(10416)
+val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("1.4.17")
+val appVersionCode: Int = providers.gradleProperty("appVersionCode").map(String::toInt).getOrElse(10417)
 
 // El sabor premium es otra aplicación en Play (applicationId propio); el
 // desplazamiento 10xxx / 20xxx se mantiene para que las dos trazas de
