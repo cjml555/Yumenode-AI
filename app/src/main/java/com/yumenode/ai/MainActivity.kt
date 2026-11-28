@@ -1036,7 +1036,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases, ApiHost, AttachHost
         }
         r1.addView(appBarPlus, wrapWrap())
         if (FeatureToggleManager.isPremium) {
-            val premiumBtn = ui.iconButton("★") { toast("Premium unlocked") }
+            val premiumBtn = ui.iconButton("★") { toast(getString(R.string.premium_unlocked)) }
             r1.addView(premiumBtn, wrapWrap())
         }
         bar.addView(r1, matchWrap())

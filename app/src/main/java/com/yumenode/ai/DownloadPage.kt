@@ -235,7 +235,7 @@ class DownloadPage(
 
                         // La descarga va a WorkManager: sobrevive a cerrar la app
                         // o a que Android mate el proceso (se reanuda desde el .parts).
-                        toast("Descargando ${info.name}...")
+                        toast(ctx.getString(R.string.dl_toast_downloading, info.name))
                         ModelDownloads.enqueue(ctx, info.name, info.name)
                         downloadJob?.cancel()
                         // Progreso y resultado llegan por flujos EN MEMORIA: los
@@ -258,14 +258,14 @@ class DownloadPage(
                                 btn.text = btnLabel
                                 when {
                                     st == "ok" -> {
-                                        toast("Descarga completada: ${info.name}")
+                                        toast(ctx.getString(R.string.dl_toast_done, info.name))
                                         refresh()
                                         // El modelo recién bajado debe aparecer ya
                                         // seleccionable en la pestaña Models/API.
                                         onModelsChanged()
                                     }
-                                    st == "cancelada" -> toast("Descarga cancelada")
-                                    else -> toast("Error: ${st.removePrefix("error:")}")
+                                    st == "cancelada" -> toast(ctx.getString(R.string.dl_toast_cancelled))
+                                    else -> toast(ctx.getString(R.string.dl_toast_error, st.removePrefix("error:")))
                                 }
                                 downloadJob?.cancel()
                             }

@@ -399,7 +399,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_043)), matchWrap().apply { topMargin = dp(14) })
         aboutBody.addView(host.ui.hintText("visitor257"))
         // Crédito original + nota de fork: rebautizado y refactorizado
-        aboutBody.addView(host.ui.hintText("Original: Ponko © visitor257 (MIT). Derivado como fork, rebautizado y parcialmente refactorizado como Yumenode AI."))
+        aboutBody.addView(host.ui.hintText(getString(R.string.about_fork_credit)))
 
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_194)), matchWrap().apply { topMargin = dp(14) })
         aboutBody.addView(linkText(getString(R.string.s_107), "https://github.com/cjml555/Yumenode-AI"))
@@ -422,16 +422,19 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 // Premium status row (visible only on premium flavor)
         if (FeatureToggleManager.isPremium) {
             val enabled = listOf(
-                "cloud sync" to FeatureToggleManager.enableCloudSync,
-                "batch generation" to FeatureToggleManager.enableBatchGeneration,
-                "advanced benchmark" to FeatureToggleManager.enableAdvancedBenchmark,
-                "session export" to FeatureToggleManager.enableSessionExport,
-                "usage analytics" to FeatureToggleManager.enableUsageAnalytics,
-                "custom prompts" to FeatureToggleManager.enableCustomPrompts,
-                "multi-device API" to FeatureToggleManager.enableMultiDeviceAPI,
-                "priority GPU" to FeatureToggleManager.enablePriorityGPU
+                getString(R.string.feat_cloud_sync) to FeatureToggleManager.enableCloudSync,
+                getString(R.string.feat_batch_generation) to FeatureToggleManager.enableBatchGeneration,
+                getString(R.string.feat_advanced_benchmark) to FeatureToggleManager.enableAdvancedBenchmark,
+                getString(R.string.feat_session_export) to FeatureToggleManager.enableSessionExport,
+                getString(R.string.feat_usage_analytics) to FeatureToggleManager.enableUsageAnalytics,
+                getString(R.string.feat_custom_prompts) to FeatureToggleManager.enableCustomPrompts,
+                getString(R.string.feat_multi_device_api) to FeatureToggleManager.enableMultiDeviceAPI,
+                getString(R.string.feat_priority_gpu) to FeatureToggleManager.enablePriorityGPU
             ).filter { it.second }.joinToString { it.first }
-            aboutBody.addView(host.ui.hintText("Premium features: $enabled"), matchWrap())
+            aboutBody.addView(
+                host.ui.hintText(getString(R.string.premium_features, enabled)),
+                matchWrap()
+            )
         }
 
         // Premium: Export sessions
@@ -518,20 +521,20 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
     private fun exportSessions() {
         val sessions = host.activity.filesDir.listFiles { _, name -> name == "sessions.json" }?.firstOrNull()
         if (sessions == null) {
-            host.toast("No sessions file found")
+            host.toast(host.activity.getString(R.string.export_no_sessions))
             return
         }
         val data = sessions.readText()
         val file = File(host.activity.getExternalFilesDir(null), "sessions_export_${System.currentTimeMillis()}.json")
         file.writeText(data)
-        host.toast("Sessions exported to ${file.absolutePath}")
+        host.toast(host.activity.getString(R.string.export_sessions_ok, file.absolutePath))
     }
 
     /** Premium: advanced benchmark — export detailed CSV to external files dir. */
     private fun exportAdvancedBenchmark() {
         val bench = (host as? BenchmarkHost)?.lastBench
         if (bench == null) {
-            host.toast("No benchmark data. Run benchmark first.")
+            host.toast(host.activity.getString(R.string.export_no_bench))
             return
         }
         val csv = StringBuilder()
@@ -539,18 +542,18 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         csv.appendLine("${System.currentTimeMillis()},${bench.model},${bench.backend},${bench.device},${bench.soc},${bench.tpsAvg},${bench.tpsMin},${bench.tpsMax},${bench.latMin},${bench.latMax},${bench.tokens}")
         val file = File(host.activity.getExternalFilesDir(null), "benchmark_${System.currentTimeMillis()}.csv")
         file.writeText(csv.toString())
-        host.toast("Benchmark CSV exported to ${file.absolutePath}")
+        host.toast(host.activity.getString(R.string.export_bench_ok, file.absolutePath))
     }
 
     /** Premium: cloud sync — upload sessions.json to a user-provided server URL. */
     private fun openCloudSync() {
         val prefs = host.activity.getSharedPreferences("cloud_sync", Context.MODE_PRIVATE)
         val urlInput = EditText(host.activity).apply {
-            hint = "Server URL"
+            hint = host.activity.getString(R.string.cloud_sync_url_hint)
             setText(prefs.getString("url", ""))
         }
         val tokenInput = EditText(host.activity).apply {
-            hint = "Token (optional)"
+            hint = host.activity.getString(R.string.cloud_sync_token_hint)
             setText(prefs.getString("token", ""))
         }
         val layout = LinearLayout(host.activity).apply {
@@ -565,7 +568,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             .setPositiveButton(R.string.s_580) { _, _ ->
                 val url = urlInput.text.toString().trim()
                 if (url.isBlank()) {
-                    host.toast("Enter a server URL")
+                    host.toast(host.activity.getString(R.string.cloud_sync_url_missing))
                     return@setPositiveButton
                 }
                 val token = tokenInput.text.toString().trim()
@@ -579,7 +582,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
     private fun uploadSessions(url: String, token: String) {
         val sessions = host.activity.filesDir.listFiles { _, name -> name == "sessions.json" }?.firstOrNull()
         if (sessions == null) {
-            host.toast("No sessions file found")
+            host.toast(host.activity.getString(R.string.export_no_sessions))
             return
         }
         val data = sessions.readText()
@@ -596,10 +599,15 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 val code = conn.responseCode
                 conn.disconnect()
                 host.activity.runOnUiThread {
-                    host.toast(if (code in 200..299) "Cloud sync OK (HTTP $code)" else "Cloud sync failed (HTTP $code)")
+                    host.toast(
+                        if (code in 200..299) host.activity.getString(R.string.cloud_sync_ok, code)
+                        else host.activity.getString(R.string.cloud_sync_failed_http, code)
+                    )
                 }
             } catch (e: Throwable) {
-                host.activity.runOnUiThread { host.toast("Cloud sync failed: ${e.message ?: e.javaClass.simpleName}") }
+                host.activity.runOnUiThread {
+                    host.toast(host.activity.getString(R.string.cloud_sync_failed, e.message ?: e.javaClass.simpleName))
+                }
             }
         }.start()
     }
@@ -608,7 +616,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
     private fun exportUsageAnalytics() {
         val sessionsFile = File(host.activity.filesDir, "sessions.json")
         if (!sessionsFile.exists()) {
-            host.toast("No session data yet")
+            host.toast(host.activity.getString(R.string.analytics_no_data))
             return
         }
         val rows = mutableListOf<String>()
@@ -635,9 +643,9 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             csv.appendLine("# summary,${arr.length()} sessions,$totalTurns turns,$totalImages images")
             val file = File(host.activity.getExternalFilesDir(null), "analytics_${System.currentTimeMillis()}.csv")
             file.writeText(csv.toString())
-            host.toast("Analytics exported: ${arr.length()} sessions, $totalTurns turns, $totalImages images")
+            host.toast(host.activity.getString(R.string.analytics_ok, arr.length(), totalTurns, totalImages))
         } catch (e: Throwable) {
-            host.toast("Analytics failed: ${e.message ?: e.javaClass.simpleName}")
+            host.toast(host.activity.getString(R.string.analytics_failed, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -650,12 +658,16 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         val base = ApiService.chatAddress
             ?: "http://${ApiService.localIp()}:$chatPort"
         val body = buildString {
-            append("Chat API: $base\n")
-            append(if (ApiService.chatRunning) "Status: running" else if (chatEnabled) "Status: enabled but not started" else "Status: disabled")
+            append(host.activity.getString(R.string.api_dialog_chat, base)).append("\n")
+            append(
+                if (ApiService.chatRunning) host.activity.getString(R.string.api_status_running)
+                else if (chatEnabled) host.activity.getString(R.string.api_status_enabled)
+                else host.activity.getString(R.string.api_status_disabled)
+            )
             append("\n")
-            append("Key: ").append(if (apiKey != null) "set" else "none (open)")
+            append(host.activity.getString(R.string.api_key_label, if (apiKey != null) host.activity.getString(R.string.api_key_set) else host.activity.getString(R.string.api_key_none)))
             append("\n\n/v1/chat/completions · /v1/models · /health\n")
-            append("Same Wi-Fi required. Start the API in Models/API → API first.")
+            append(host.activity.getString(R.string.api_hint_wifi))
         }
         val layout = LinearLayout(host.activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -671,10 +683,10 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         android.app.AlertDialog.Builder(host.activity)
             .setTitle(R.string.s_582)
             .setView(layout)
-            .setPositiveButton("Copy URL") { _, _ ->
+            .setPositiveButton(R.string.copy_url) { _, _ ->
                 val cm = host.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("api", base))
-                host.toast("Copied: $base")
+                host.toast(host.activity.getString(R.string.copied_value, base))
             }
             .setNeutralButton("Share") { _, _ ->
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -710,7 +722,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 val urls = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                 prefs.edit().putString("peers", urls.joinToString("\n")).apply()
                 ClusterRouter.reload(host.activity)
-                host.toast("Saved ${urls.size} peer(s)")
+                host.toast(host.activity.getString(R.string.saved_peers, urls.size))
             }
             .setNegativeButton(R.string.s_066, null)
             .show()
@@ -750,7 +762,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                     setOnClickListener {
                         val cm = host.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("prompt", t))
-                        host.toast("Copied: $name")
+                        host.toast(host.activity.getString(R.string.copied_value, name))
                     }
                 }
                 val delBtn = Button(host.activity).apply {
@@ -758,7 +770,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                     setOnClickListener {
                         prefs.edit().remove(name).apply()
                         refreshList()
-                        host.toast("Deleted: $name")
+                        host.toast(host.activity.getString(R.string.deleted_value, name))
                     }
                 }
                 row.addView(lbl)
@@ -791,7 +803,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 nameInput.setText("")
                 textInput.setText("")
                 refreshList()
-                host.toast("Saved: $n")
+                host.toast(host.activity.getString(R.string.saved_value, n))
             }
         }
         addRow.addView(nameInput)
@@ -913,7 +925,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             setOnClickListener {
                 runCatching {
                     startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                }.onFailure { host.toast(getString(R.string.s_134)) }
+                }.onFailure { host.toast(host.activity.getString(R.string.s_134)) }
             }
         }
     }

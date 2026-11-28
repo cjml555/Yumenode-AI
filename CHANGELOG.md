@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.17] - 2026-11-27
+
+### Changed
+- **Segunda pasada de i18n**: 41 cadenas que seguían escritas en el código pasan a recursos, con
+  inglés, español y chino. Afecta a los avisos de descarga (`dl_toast_*`), al bloque de funciones
+  premium (`feat_*`, `premium_features`), a los flujos de exportación, sincronización en la nube y
+  analítica (`export_*`, `cloud_sync_*`, `analytics_*`), al diálogo de la API (`api_*`,
+  `copy_url`, `copied_value`) y a los avisos de prompts guardados (`saved_value`, `deleted_value`).
+- El crédito del fork deja de estar en español fijo en `SettingsPage.kt`.
+
+### Added
+- `tools/find-hardcoded-ui-text.py`: barre `app/src/main/java` y lista los literales con pinta de
+  texto de UI. Útil para la siguiente pasada.
+- `tools/i18n-pass2.py`: aplica esta tanda (cadenas + sustituciones) de forma reproducible.
+
+### Verified
+- 375 tests en verde; paridad de cadenas 705/705/705 entre `values`, `values-es` y `values-zh`;
+  `aapt2 dump resources` sobre el APK confirma las 41 claves nuevas con sus tres variantes.
+
 ## [1.4.16] - 2026-11-27
 
 ### Added
