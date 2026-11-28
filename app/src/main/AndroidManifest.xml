@@ -106,6 +106,17 @@
                 tools:node="remove" />
         </provider>
 
+        <!--
+            WorkManager lanza un servicio en primer plano para la descarga y llama a
+            startForeground(..., FOREGROUND_SERVICE_TYPE_DATA_SYNC). Android 14+ exige que
+            el manifiesto declare ese tipo en el propio servicio; sin él la app se cae con
+            "foregroundServiceType 0x1 is not a subset of ... 0x0".
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <service
             android:name=".ApiService"
             android:exported="false"

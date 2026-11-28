@@ -6,6 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.18] - 2026-11-28
+
+### Fixed
+- **Cuelgue al usar la app con una descarga activa (ANR #3), causa raíz encontrada**: no era un
+  bloqueo, era un **crash**. WorkManager levanta `SystemForegroundService` con
+  `FOREGROUND_SERVICE_TYPE_DATA_SYNC`, pero el manifiesto fusionado no declaraba ningún
+  `foregroundServiceType` para ese servicio (venía del AAR sin tipo), y Android 14+ lo exige:
+
+  ```
+  IllegalArgumentException: foregroundServiceType 0x00000001 is not a subset of
+  foregroundServiceType attribute 0x00000000 in service element of manifest file
+  ```
+
+  El proceso moría al arrancar la descarga y el sistema lo reportaba como
+  «Input dispatching timed out», de ahí que la investigación apuntara a un cerrojo del hilo
+  principal. Se declara el servicio con `android:foregroundServiceType="dataSync"`
+  y `tools:node="merge"`; el permiso `FOREGROUND_SERVICE_DATA_SYNC` ya estaba.
+
+### Verified
+- En el Edge 50 Fusion, dos pasadas completas: descarga 97 → 211 → 329 MB y 102 → 228 MB con
+  **0 ANR y 0 crashes**, incluido cambiar a Chat con la descarga en marcha.
+- `dumpsys activity services` confirma `isForeground=true types=0x00000001`.
+
 ## [1.4.17] - 2026-11-27
 
 ### Changed
