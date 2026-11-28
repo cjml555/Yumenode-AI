@@ -4,8 +4,6 @@ All notable changes to this project are documented in this file.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [1.4.18] - 2026-11-28
 
 ### Fixed
@@ -28,6 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - En el Edge 50 Fusion, dos pasadas completas: descarga 97 → 211 → 329 MB y 102 → 228 MB con
   **0 ANR y 0 crashes**, incluido cambiar a Chat con la descarga en marcha.
 - `dumpsys activity services` confirma `isForeground=true types=0x00000001`.
+
+## [Unreleased]
+
+### Added
+- `tools/anr-repro.sh`: reproduce de forma determinista el ANR que aparece con una descarga
+  activa al cambiar a la pestaña Chat. Protocolo validado: instalación fría → abrir → pestaña
+  «Modelos libres» → «Descargar modelo» → 4 s → pestaña Chat → 9 s → contar el ANR en logcat.
+
+### Known issue
+- **ANR con descarga activa** (sigue abierto). Reproducido 5/5 en v1.4.15, 2/2 en v1.4.16 y en
+  v1.4.17 compilado desde un directorio nuevo. Las ocho hipótesis anteriores (renderList,
+  notificación de progreso, paralelismo, preferencias en el hilo principal, compilación AOT,
+  encolado de WorkManager, desprendimiento del hilo por JNI, lectura de sesiones) siguen
+  descartadas. Ojo: **la tasa depende del binario** — un build incremental con otra
+  `libstable-diffusion.so` no lo reprodujo en 7 intentos, así que toda comparación debe hacerse
+  con builds del mismo origen y al menos 3 intentos por build.
 
 ## [1.4.17] - 2026-11-27
 
