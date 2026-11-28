@@ -34,14 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   activa al cambiar a la pestaña Chat. Protocolo validado: instalación fría → abrir → pestaña
   «Modelos libres» → «Descargar modelo» → 4 s → pestaña Chat → 9 s → contar el ANR en logcat.
 
-### Known issue
-- **ANR con descarga activa** (sigue abierto). Reproducido 5/5 en v1.4.15, 2/2 en v1.4.16 y en
-  v1.4.17 compilado desde un directorio nuevo. Las ocho hipótesis anteriores (renderList,
-  notificación de progreso, paralelismo, preferencias en el hilo principal, compilación AOT,
-  encolado de WorkManager, desprendimiento del hilo por JNI, lectura de sesiones) siguen
-  descartadas. Ojo: **la tasa depende del binario** — un build incremental con otra
-  `libstable-diffusion.so` no lo reprodujo en 7 intentos, así que toda comparación debe hacerse
-  con builds del mismo origen y al menos 3 intentos por build.
+### Fixed (verificado)
+- **ANR con descarga activa — cerrado.** La causa era un `IllegalArgumentException` al levantar
+  `SystemForegroundService` de WorkManager (faltaba `android:foregroundServiceType="dataSync"` en
+  el manifiesto fusionado, que Android 14+ exige); el proceso moría y el sistema lo reportaba como
+  «no responde». Arreglado en `e0482a9` y publicado en 1.4.18.
+- Comprobado con `tools/anr-repro.sh` (protocolo determinista): **10/10 intentos con ANR** en
+  builds anteriores al arreglo (v1.4.15, v1.4.16, v1.4.17) y **0/3** en un build fresco del árbol
+  arreglado, con descargas reales de 14–16 MB. En el APK:
+  `aapt2 dump xmltree --file AndroidManifest.xml | grep foregroundServiceType` → `0x00000001`.
 
 ## [1.4.17] - 2026-11-27
 
